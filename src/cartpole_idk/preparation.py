@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -10,6 +11,8 @@ import numpy as np
 
 from cartpole_idk.storage import Trajectory, TrajectoryStore
 
+
+logger = logging.getLogger(__name__)
 
 def prepare_dataset(
     dataset: str | Path | Sequence[str | Path],
@@ -43,6 +46,13 @@ def prepare_dataset(
     datasets = [dataset] if isinstance(dataset, (str, Path)) else list(dataset)
     if not datasets:
         raise ValueError("At least one source dataset is required")
+
+    logger.info(f"Preparing dataset from {datasets}")
+    logger.info(f"episode_length: {episode_length}")
+    logger.info(f"min_episode_length: {min_episode_length}")
+    logger.info(f"success_threshold: {success_threshold}")
+    logger.info(f"success_buffer: {success_buffer}")
+
     sources = [TrajectoryStore(path) for path in datasets]
     source_paths = [str(source.root.resolve()) for source in sources]
     if len(set(source_paths)) != len(source_paths):
