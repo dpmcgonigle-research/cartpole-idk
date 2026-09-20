@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.2] - 2026-09-20
+
+### Added
+
+- Whole-trajectory and rolling-window IDK analytics: shared fitting, sparse pairwise metrics, reference neighbors and likeness, sklearn clustering and diagnostics, population RBF-MMD/permutations, reproducible artifacts, optional plots, and the `cartpole-analyze` CLI.
+
 ## [0.1.1] - 2026-09-16
 
 ### Added

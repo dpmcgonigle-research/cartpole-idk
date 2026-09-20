@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pyidk import IsolationDistributionalKernel, IsolationKernel, Standardizer
+from pyidk import IsolationDistributionalKernel, IsolationKernel, SequenceBatch, Standardizer
+from scipy.sparse import csr_matrix
 
 from cartpole_idk.idk.config import IDKExperimentConfig
 from cartpole_idk.idk.features import build_sequence_batch
@@ -14,7 +15,7 @@ class IDKReference:
     config: IDKExperimentConfig
     scaler: Standardizer
     model: IsolationDistributionalKernel
-    reference_embeddings: object
+    reference_embeddings: csr_matrix
     trajectory_ids: list[str]
 
 
@@ -23,6 +24,15 @@ def fit_reference(
 ) -> IDKReference:
     trajectories = [store.get(tid) for tid in trajectory_ids]
     batch = build_sequence_batch(trajectories, config)
+    return fit_sequence_batch(batch, trajectory_ids, config)
+
+
+def fit_sequence_batch(
+    batch: SequenceBatch, sequence_ids: list[str], config: IDKExperimentConfig
+) -> IDKReference:
+    """Fit scaler and pyidk basis exclusively on the supplied fitting sequences."""
+    if len(sequence_ids) != batch.n_sequences or (batch.lengths == 0).any():
+        raise ValueError("Provide one ID per nonempty fitting sequence")
     scaler = Standardizer().fit(batch.values)
     scaled = batch.with_values(scaler.transform(batch.values))
     point_kernel = IsolationKernel(
@@ -32,4 +42,4 @@ def fit_reference(
     )
     model = IsolationDistributionalKernel(point_kernel)
     embeddings = model.fit_transform(scaled)
-    return IDKReference(config, scaler, model, embeddings, list(trajectory_ids))
+    return IDKReference(config, scaler, model, embeddings, list(sequence_ids))
