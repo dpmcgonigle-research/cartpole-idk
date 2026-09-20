@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from cartpole_idk.idk.features import build_sequence_batch
+from cartpole_idk.idk.fitting import IDKReference
 from cartpole_idk.storage import Trajectory
-
-from .features import build_sequence_batch
-from .fitting import IDKReference
 
 
 def trajectory_familiarity(

@@ -13,6 +13,7 @@ separate `pyidk` package and is consumed here as a dependency.
 - [Installation](#installation)
 - [Train](#train)
 - [Generate Trajectories](#generate-trajectories)
+- [Prepare Datasets](#prepare-datasets)
 - [Stored Trajectory Semantics](#stored-trajectory-semantics)
 - [Query](#query)
 - [Replay](#replay)
@@ -81,26 +82,33 @@ Training is measured in environment steps. Periodic evaluation runs are greedy
 Nominal:
 
 ```bash
-cartpole-generate   --checkpoint runs/dqn_seed42/checkpoints/step_000200000.pt   --output datasets/nominal   --episodes 100
+cartpole-generate   --checkpoint runs/dqn_seed42/checkpoints/step_000200000.pt   --output datasets/generated/nominal   --episodes 100
 ```
 
 Action delay:
 
 ```bash
-cartpole-generate   --checkpoint runs/dqn_seed42/checkpoints/step_000200000.pt   --output datasets/action_delay   --episodes 100   --perturbation action-delay   --onset-mean 50   --onset-std 5   --delay-steps 3
+cartpole-generate   --checkpoint runs/dqn_seed42/checkpoints/step_000200000.pt   --output datasets/generated/action_delay   --episodes 100   --perturbation action-delay   --onset-mean 50   --onset-std 5   --delay-steps 3
 ```
 
 Action flip:
 
 ```bash
-cartpole-generate   --checkpoint runs/dqn_seed42/checkpoints/step_000200000.pt   --output datasets/action_flip   --episodes 100   --perturbation action-flip   --onset-mean 75   --onset-std 8   --flip-probability 0.5
+cartpole-generate   --checkpoint runs/dqn_seed42/checkpoints/step_000200000.pt   --output datasets/generated/action_flip   --episodes 100   --perturbation action-flip   --onset-mean 75   --onset-std 8   --flip-probability 0.5
 ```
 
 Observation bias:
 
 ```bash
-cartpole-generate   --checkpoint runs/dqn_seed42/checkpoints/step_000200000.pt   --output datasets/angle_bias   --episodes 100   --perturbation observation-bias   --feature pole_angle   --onset-mean 60   --onset-std 5   --bias 0.24   --noise-std 0.01   --ramp-steps 15
+cartpole-generate   --checkpoint runs/dqn_seed42/checkpoints/step_000200000.pt   --output datasets/generated/angle_bias   --episodes 100   --perturbation observation-bias   --feature pole_angle   --onset-mean 60   --onset-std 5   --bias 0.24   --noise-std 0.01   --ramp-steps 15
 ```
+
+Generation writes `generation_report.json` with per-trajectory records and
+`return_statistics`: `mean`, `std_dev` (population standard deviation), `min`,
+`max`, `q1`, `median`, and `q3` (linearly interpolated quartiles). Statistics are
+`null` when no episodes are generated. Load reports as typed objects with
+`GenerationReport.from_file(path)` from `cartpole_idk.model`; older reports
+without statistics are supported.
 
 ### Perturbations
 
@@ -130,6 +138,61 @@ The sampled onset and perturbation parameters are saved in trajectory metadata.
 
 [Back to Top](#cartpole-idk)
 
+## Prepare Datasets
+
+Prepare one contiguous segment per eligible generated trajectory for IDK fitting:
+
+```bash
+# Randomly sample segments from different episode parts
+cartpole-prepare datasets/generated/nominal --output datasets/prepared/nominal --seed 42
+
+# Combine multiple generated datasets:
+cartpole-prepare datasets/generated/nominal datasets/generated/action_delay --output datasets/prepared/combined
+# Start every segment at timestep zero:
+cartpole-prepare datasets/generated/nominal --output datasets/prepared/from_zero --episode-start 0
+```
+
+Options:
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--episode-length` | 100 | Maximum segment length in transitions |
+| `--min-episode-length` | 25 | Skip segments shorter than this |
+| `--success-threshold` | 300 | Source lengths at or above this are successes |
+| `--success-buffer` | 50 | Exclude this many steps before the success threshold |
+| `--episode-start` | None | Fixed start for all segments; otherwise sample successes and take failure tails |
+| `--seed` | 1000 | Seed for reproducible uniform sampling |
+
+Successful segments always have `episode-length` transitions. Their start is sampled
+uniformly from the integers `0` through
+`success-threshold - success-buffer - episode-length`, inclusive. With defaults,
+starts range from 0 to 150, and each segment fits within the boundary `[0, 250]`.
+Failures use their final `episode-length` transitions, or the entire trajectory if
+shorter, provided they meet the minimum length.
+
+An explicit `--episode-start` overrides start selection for both successes and
+failures. Failures ending before a full segment is available retain the remaining
+steps if they meet the minimum; otherwise they are skipped. Fixed starts must
+still allow a full successful segment inside the buffered boundary. Invalid
+lengths, buffers, and starts are rejected.
+
+Pass one or more input directories before `--output`. All inputs use the same
+sampling options and contribute to a single output dataset. Sampling is reproducible
+for the same seed and input order. Repeated source directories are rejected.
+For multiple inputs, output trajectory IDs are prefixed with `source_<index>_`
+(zero-based input order) to prevent collisions; the original ID and dataset path
+remain in each segment's metadata. Single-input IDs remain unchanged.
+
+The output must be new or empty. It uses the same NPZ/Parquet format as generated
+datasets and can be passed directly to the IDK fitting/evaluation code. Observations
+retain the final next state (`T+1` observations for `T` transitions). The manifest
+records source IDs, source lengths/returns, success labels, and segment offsets
+(`segment_stop` is exclusive for transitions). Perturbation onsets are adjusted to
+segment-local coordinates; negative onsets mean the perturbation was already active.
+`preparation_report.json` records options and saved/skipped counts.
+
+[Back to Top](#cartpole-idk)
+
 ## Stored Trajectory Semantics
 
 Each `.npz` stores:
@@ -151,7 +214,7 @@ A Parquet manifest indexes trajectory metadata.
 ## Query
 
 ```bash
-cartpole-query datasets/action_delay   --perturbation action_delay   --max-return 250
+cartpole-query datasets/generated/action_delay   --perturbation action_delay   --max-return 250
 ```
 
 [Back to Top](#cartpole-idk)
@@ -159,7 +222,7 @@ cartpole-query datasets/action_delay   --perturbation action_delay   --max-retur
 ## Replay
 
 ```bash
-cartpole-replay datasets/action_delay --trajectory <trajectory-id>
+cartpole-replay datasets/generated/action_delay --trajectory <trajectory-id>
 ```
 
 Replay uses recorded true states rather than re-executing actions.

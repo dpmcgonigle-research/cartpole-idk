@@ -58,11 +58,20 @@ def test_generate_query_and_evaluate_workflow(trained_run, tmp_path, monkeypatch
             "4",
         ],
     )
-    generate.main()
+    generate.main(standalone_mode=False)
     store = TrajectoryStore(dataset)
     ids = store.manifest()["trajectory_id"].tolist()
     assert len(ids) == len(set(ids)) == 2
     report = json.loads((dataset / "generation_report.json").read_text())
+    assert report["return_statistics"] == {
+        "mean": 4,
+        "std_dev": 0,
+        "min": 4,
+        "max": 4,
+        "q1": 4,
+        "median": 4,
+        "q3": 4,
+    }
     assert report["episodes"] == 2
     assert [row["trajectory_id"] for row in report["generated"]] == ids
     trajectories = [store.get(tid) for tid in ids]
@@ -81,7 +90,7 @@ def test_generate_query_and_evaluate_workflow(trained_run, tmp_path, monkeypatch
         trajectory_familiarity(reference, trajectories, k=0)
 
     monkeypatch.setattr("sys.argv", ["cartpole-query", str(dataset), "--min-return", "4"])
-    query.main()
+    query.main(standalone_mode=False)
     output = capsys.readouterr().out
     assert all(tid in output for tid in ids)
     monkeypatch.setattr(
@@ -99,7 +108,7 @@ def test_generate_query_and_evaluate_workflow(trained_run, tmp_path, monkeypatch
             "4",
         ],
     )
-    evaluate_idk.main()
+    evaluate_idk.main(standalone_mode=False)
     tid, score = capsys.readouterr().out.strip().split("\t")
     assert tid == ids[0]
     assert np.isfinite(float(score))

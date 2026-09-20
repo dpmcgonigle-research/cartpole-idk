@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ..onset import NormalOnset
-from .base import Perturbation
+from cartpole_idk.generation.onset import NormalOnset
+from cartpole_idk.generation.perturbations.base import Perturbation
 
 
 @dataclass(slots=True)

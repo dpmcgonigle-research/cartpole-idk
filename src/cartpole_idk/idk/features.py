@@ -4,9 +4,8 @@ import numpy as np
 from pyidk import SequenceBatch
 from pyidk.representation import TransitionRepresentation, WindowRepresentation
 
+from cartpole_idk.idk.config import IDKExperimentConfig
 from cartpole_idk.storage import Trajectory
-
-from .config import IDKExperimentConfig
 
 
 def _observations(traj: Trajectory, source: str) -> np.ndarray:

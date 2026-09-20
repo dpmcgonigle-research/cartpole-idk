@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import secrets
 from datetime import UTC, datetime
@@ -9,10 +8,10 @@ from pathlib import Path
 import gymnasium as gym
 import numpy as np
 
+from cartpole_idk.generation.perturbations import Perturbation
+from cartpole_idk.model import GeneratedTrajectory, GenerationReport
 from cartpole_idk.storage import Trajectory, TrajectoryStore
 from cartpole_idk.training import load_checkpoint
-
-from .perturbations import Perturbation
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,7 @@ def generate_dataset(
     store.initialize()
     perturbation = perturbation or Perturbation()
     rng = np.random.default_rng(seed)
-    generated = []
+    generated: list[GeneratedTrajectory] = []
     progress_every = max(1, episodes // 10)
     logger.info(
         "Starting generation: %d episodes, perturbation=%s, seed=%d, output=%s",
@@ -100,12 +99,12 @@ def generate_dataset(
         )
         store.add(traj)
         generated.append(
-            {
-                "trajectory_id": tid,
-                "return": traj.episode_return,
-                "length": traj.length,
-                "perturbation_onset": pmeta.get("onset"),
-            }
+            GeneratedTrajectory(
+                trajectory_id=tid,
+                episode_return=traj.episode_return,
+                length=traj.length,
+                perturbation_onset=pmeta.get("onset"),
+            )
         )
         env.close()
         if (episode + 1) % progress_every == 0 or episode + 1 == episodes:
@@ -117,19 +116,13 @@ def generate_dataset(
                 traj.length,
             )
 
-    Path(output, "generation_report.json").write_text(
-        json.dumps(
-            {
-                "checkpoint": str(checkpoint_path),
-                "episodes": episodes,
-                "seed": seed,
-                "perturbation_type": perturbation.name,
-                "generated": generated,
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+    GenerationReport(
+        checkpoint=str(checkpoint_path),
+        episodes=episodes,
+        seed=seed,
+        perturbation_type=perturbation.name,
+        generated=generated,
+    ).to_file(Path(output, "generation_report.json"))
     logger.info(
         "Generation complete: %d trajectories saved; report=%s",
         len(generated),

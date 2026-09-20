@@ -9,10 +9,10 @@ import gymnasium as gym
 import numpy as np
 import torch
 
-from .checkpoint import save_checkpoint
-from .config import TrainingConfig
-from .dqn import DQNAgent, ReplayBuffer, Transition
-from .evaluation import evaluate_agent
+from cartpole_idk.training.checkpoint import save_checkpoint
+from cartpole_idk.training.config import TrainingConfig
+from cartpole_idk.training.dqn import DQNAgent, ReplayBuffer, Transition
+from cartpole_idk.training.evaluation import evaluate_agent
 
 logger = logging.getLogger(__name__)
 

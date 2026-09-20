@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .trajectory import Trajectory
+from cartpole_idk.storage.trajectory import Trajectory
 
 
 class TrajectoryStore:

@@ -4,10 +4,9 @@ from dataclasses import dataclass
 
 from pyidk import IsolationDistributionalKernel, IsolationKernel, Standardizer
 
+from cartpole_idk.idk.config import IDKExperimentConfig
+from cartpole_idk.idk.features import build_sequence_batch
 from cartpole_idk.storage import TrajectoryStore
-
-from .config import IDKExperimentConfig
-from .features import build_sequence_batch
 
 
 @dataclass(slots=True)

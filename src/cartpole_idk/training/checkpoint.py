@@ -6,7 +6,7 @@ from typing import Any
 
 import torch
 
-from .dqn import DQNAgent
+from cartpole_idk.training.dqn import DQNAgent
 
 logger = logging.getLogger(__name__)
 

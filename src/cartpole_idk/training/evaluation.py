@@ -3,7 +3,7 @@ from __future__ import annotations
 import gymnasium as gym
 import numpy as np
 
-from .dqn import DQNAgent
+from cartpole_idk.training.dqn import DQNAgent
 
 
 def evaluate_agent(
