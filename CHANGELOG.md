@@ -2,6 +2,10 @@
 
 ## [0.1.2] - 2026-09-20
 
+### Changed
+
+- Separated IDK into `cartpole-fit`, `cartpole-embed`, and artifact-only `cartpole-analyze`, with validated Pydantic configuration, versioned/checksummed model and sparse embedding artifacts, and load/save APIs. Removed `cartpole-idk-evaluate`; use `cartpole-analyze neighbors` for top-k scoring.
+
 ### Added
 
 - Whole-trajectory and rolling-window IDK analytics: shared fitting, sparse pairwise metrics, reference neighbors and likeness, sklearn clustering and diagnostics, population RBF-MMD/permutations, reproducible artifacts, optional plots, and the `cartpole-analyze` CLI.

@@ -14,6 +14,18 @@ logger = logging.getLogger(__name__)
 @click.option("--trajectory", required=True, type=str)
 @click.option("--fps", default=50.0, type=float)
 def main(dataset, trajectory, fps) -> None:
+    """Display a recorded trajectory as a CartPole animation.
+
+    \b
+    Args:
+        dataset: Trajectory dataset directory.
+        trajectory: Stored trajectory ID to replay.
+        fps: Playback frames per second.
+
+    Notes:
+
+        Playback uses recorded true states; it does not rerun the policy.
+    """
     configure_logging()
     logger.info("Loading trajectory %s from %s for replay at %g FPS", trajectory, dataset, fps)
     replay_trajectory(TrajectoryStore(dataset).get(trajectory), fps=fps)

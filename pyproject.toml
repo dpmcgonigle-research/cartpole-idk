@@ -34,6 +34,7 @@ dev = [
 ]
 nb = [
   "matplotlib>=3.10",
+  "umap-learn>=0.5",
   "jupyterlab>=4.4",
   "nbclient>=0.10",
   "nbformat>=5.10",
@@ -47,7 +48,8 @@ cartpole-prepare = "cartpole_idk.cli.prepare:main"
 cartpole-replay = "cartpole_idk.cli.replay:main"
 cartpole-query = "cartpole_idk.cli.query:main"
 cartpole-analyze = "cartpole_idk.cli.analyze:main"
-cartpole-idk-evaluate = "cartpole_idk.cli.evaluate_idk:main"
+cartpole-fit = "cartpole_idk.cli.fit:main"
+cartpole-embed = "cartpole_idk.cli.embed:main"
 
 [tool.hatch.metadata]
 allow-direct-references = true

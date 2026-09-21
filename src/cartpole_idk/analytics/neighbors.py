@@ -8,8 +8,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cartpole_idk.analytics.embeddings import EmbeddingSet
 from cartpole_idk.analytics.metrics import DEFAULT_MAX_PAIRS, METRICS, pairwise
+from cartpole_idk.storage.embeddings import EmbeddingSet
 
 
 @dataclass(slots=True)

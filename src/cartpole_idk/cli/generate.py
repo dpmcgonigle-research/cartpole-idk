@@ -58,6 +58,31 @@ def main(
     ramp_steps,
     device,
 ) -> None:
+    """Generate trajectory data and a return-statistics report from a policy.
+
+    \b
+    Args:
+        checkpoint: Trained policy checkpoint to load.
+        output: Destination dataset directory.
+        episodes: Number of trajectories to generate.
+        seed: Base random seed for episode generation.
+        max_episode_steps: Maximum transitions per trajectory.
+        perturbation: Perturbation mechanism, or none for nominal rollouts.
+        onset_mean: Mean perturbation start timestep (zero-based).
+        onset_std: Standard deviation of normally sampled start timesteps.
+        delay_steps: Action delay in transitions for action-delay.
+        flip_probability: Chance of reversing an action for action-flip.
+        feature: Observation component affected by observation-bias.
+        bias: Additive offset for observation-bias.
+        noise_std: Standard deviation of additive observation noise.
+        ramp_steps: Steps to reach full bias; zero applies it immediately.
+        device: PyTorch device used for policy inference.
+
+    Notes:
+
+        Rollouts use greedy policy actions. Perturbation-specific settings
+        apply only to the selected mechanism; true and agent states are saved.
+    """
     configure_logging()
     logger.info("Generating %d episodes from %s into %s", episodes, checkpoint, output)
     onset = NormalOnset(onset_mean, onset_std)

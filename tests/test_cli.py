@@ -4,10 +4,10 @@ import click
 import pytest
 from click.testing import CliRunner
 
-from cartpole_idk.cli import evaluate_idk, generate, prepare, query, replay, train
+from cartpole_idk.cli import embed, fit, generate, prepare, query, replay, train
 
 
-@pytest.mark.parametrize("module", [train, generate, prepare, query, replay, evaluate_idk])
+@pytest.mark.parametrize("module", [train, generate, prepare, query, replay, fit, embed])
 @pytest.mark.parametrize("flag", ["-h", "--help"])
 def test_cli_help(module, flag):
     assert isinstance(module.main, click.Command)

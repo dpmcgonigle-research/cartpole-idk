@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -9,38 +10,7 @@ from typing import Any, Literal
 import pandas as pd
 
 from cartpole_idk.storage import Trajectory
-
-
-@dataclass(frozen=True, slots=True)
-class AnalysisUnit:
-    unit_id: str
-    trajectory_id: str
-    start_step: int
-    end_step: int
-    metadata: dict[str, Any]
-    trajectory: Trajectory = field(repr=False, compare=False)
-
-    @property
-    def raw_length(self) -> int:
-        return self.end_step - self.start_step
-
-    @property
-    def source_key(self) -> tuple[str, str]:
-        """Original dataset and trajectory, including provenance of prepared segments."""
-        return (
-            self.metadata.get("source_dataset", ""),
-            self.metadata.get("source_trajectory_id", self.trajectory_id),
-        )
-
-    def record(self) -> dict[str, Any]:
-        return {
-            **self.metadata,
-            "unit_id": self.unit_id,
-            "trajectory_id": self.trajectory_id,
-            "start_step": self.start_step,
-            "end_step": self.end_step,
-            "raw_length": self.raw_length,
-        }
+from cartpole_idk.storage.units import AnalysisUnit
 
 
 @dataclass(slots=True)
@@ -91,6 +61,7 @@ def build_units(
             terminal = bool(traj.terminated[-1] or traj.truncated[-1])
             metadata = {
                 **traj.metadata,
+                "mode": mode,
                 "episode_length": traj.metadata.get("source_length", traj.length),
                 "episode_return": traj.metadata.get("source_return", traj.episode_return),
                 "stored_length": traj.length,
@@ -104,7 +75,9 @@ def build_units(
                 "terminated": bool(traj.terminated[-1]),
                 "truncated": bool(traj.truncated[-1]),
             }
-            uid = f"{traj.trajectory_id}:{start}:{end}"
+            namespace = traj.metadata.get("source_dataset", "")
+            prefix = hashlib.sha256(namespace.encode()).hexdigest()[:16] + ":" if namespace else ""
+            uid = f"{prefix}{traj.trajectory_id}:{start}:{end}"
             segment = Trajectory(
                 uid,
                 traj.true_observations[start : end + 1],

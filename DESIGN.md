@@ -32,40 +32,50 @@ Future work:
 - environment-dynamics perturbations,
 - checkpoint selection by achieved return.
 
-## Analytics
+## Explicit IDK stages
 
-`analytics/units.py` constructs episode-bounded whole or window analysis units.
-Windows count transitions, preserving T+1 observations. Source intervals are
-half-open; prepared segments retain original offsets and censoring information.
-No success/failure label is invented. Metadata is used only after embedding or
-explicitly to select populations outside metric functions.
+`pyidk` owns the generic kernels. `idk/units.py` constructs episode-bounded raw
+segments and `idk/features.py` retains all representation assembly. `idk/pipeline.py`
+provides explicit `fit_dataset()` and `embed_dataset()` operations. Fitting learns
+only from its selected feature rows; embedding uses the saved representation,
+standardizer and isolation basis without fitting or resampling.
 
-`idk.fit_sequence_batch()` is shared by existing `fit_reference()` and the new
-analytics fitting orchestration. All representations still use
-`build_sequence_batch()`. Fitting, transformation, retrieval reference libraries,
-and queries are separate roles; only fitting values construct the standardizer
-and pyidk basis. In window mode, overlapping fitting windows weight repeated
-observations multiple times; fit composition and stride are explicit research choices.
+Pydantic v2 configuration and metadata contracts live in `model.py`, separate from
+large numeric arrays. The legacy `IDKExperimentConfig` name aliases `IDKConfig`.
+Configurations are frozen, validated and directly JSON-serializable. Dynamic
+trajectory metadata remains a metadata dictionary, not a configuration mechanism.
 
-`analytics/embeddings.py` attaches fitted-space identity to sparse embeddings.
-`metrics.py` delegates native similarity to pyidk and implements derived distances
-and occupancy comparisons. Partition-wise JS/KL retain an outside cell. A small
-metric registry states ranking direction. `neighbors.py` provides matches,
-aggregate scores, rolling tables, and separate nominal/failure likeness.
+`artifacts/FitArtifact` persists config, scaler arrays, basis arrays, fitting-unit
+provenance and versioned metadata. Loading assigns the public `pyidk.IsolationBasis`
+state directly and restores `Standardizer` arrays; no fit call occurs.
+`EmbeddingArtifact` stores sparse CSR embeddings, ordered unit records, configuration,
+parent fit identity and metadata. Unit provenance has optional raw arrays during
+construction; loading artifacts leaves those arrays absent.
 
-Scikit-learn owns clustering and dimensionality reduction. Density methods use
-precomputed IDK or square-root JS distance; spectral uses native IDK affinity;
-DP-style mixtures operate on sparse SVD coordinates. External labels only enter
-post-clustering diagnostics. Population RBF-MMD operates on the next hierarchy:
-a population of trajectory/window embeddings. Permutation units are rows; inferential
-use requires exchangeability, and overlapping windows do not generally satisfy it.
+Artifact version 1 includes file checksums and a SHA-256 content identity. Loaders
+validate file presence/integrity, configuration, row order, representation width,
+scaler scales, basis dimensions/radii/sample indices, and sparse occupancy constraints.
+Embedding comparisons validate common fit identity and representation provenance.
+Artifact writes use staging directories followed by atomic publication; no pickle.
 
-`workflow.py` caches embeddings per unit within one run; `reporting.py` persists
-deduplicated sparse embeddings, explicit role/axis ordering, fitted numeric basis,
-configuration and software versions. Dense quadratic outputs have a configurable
-size guard. No serialized Python pickle is required for run artifacts.
+`analytics` consumes existing embeddings only. Its workflow has no raw dataset,
+fit or transform operations. Its typed `AnalysisConfig` selects artifacts for
+query/reference/nominal/failure/group roles. Reports record paths and content hashes,
+configuration and role ordering, without copying fitted models or embeddings.
+Raw data and parent fit directories can be offline during analysis.
 
-The analytics CLI uses Click with shared option decorators and five focused
-subcommands, matching the other project entrypoints.
-The optional suggested `all` command is omitted: researchers explicitly choose
-which analyses to run rather than incur every quadratic calculation.
+The Click pipeline is `cartpole-fit -> cartpole-embed -> cartpole-analyze`.
+The obsolete `cartpole-idk-evaluate` command is removed; its retrieval functionality
+is provided by `analyze neighbors`. Explicit low-level in-memory fitting helpers
+remain in `idk` for Python users, without a competing analytics workflow.
+
+Units count transitions and retain T+1 observations. Start/end intervals are
+half-open, source offsets survive preparation, and censored prefixes do not acquire
+invented failure times. Whole and window embeddings use the same metrics. Overlapping
+fitting windows weight repeated rows; selection and stride remain research choices.
+
+Native similarity delegates to pyidk. JS/KL preserve outside occupancy; metric
+ranking direction is explicit. Scikit-learn owns clustering/reduction, and known
+labels enter only post-clustering diagnostics. RBF-MMD operates on populations of
+IDK embeddings; row-wise permutation inference requires exchangeability, which
+rolling windows do not generally provide. Dense pairwise operations have size guards.

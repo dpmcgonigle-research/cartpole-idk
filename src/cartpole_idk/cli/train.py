@@ -36,6 +36,27 @@ def main(
     seed,
     device,
 ) -> None:
+    """Train a CartPole DQN policy and save checkpoints and metrics.
+
+    \b
+    Args:
+        run_dir: Destination directory for the training run.
+        total_steps: Total environment interactions used for training.
+        max_episode_steps: Maximum transitions per episode.
+        hidden_sizes: Hidden-layer widths, supplied as space-separated integers.
+        learning_rate: Optimizer step size.
+        batch_size: Replay-buffer samples per training update.
+        eval_every: Environment steps between policy evaluations.
+        eval_episodes: Greedy episodes per evaluation.
+        checkpoint_every: Environment steps between saved checkpoints.
+        seed: Random seed for training.
+        device: PyTorch device, such as cpu or cuda.
+
+    Notes:
+
+        Evaluation uses greedy actions without learning. Evaluation and
+        checkpoint intervals count environment steps, not episodes.
+    """
     configure_logging()
     logger.info("Training requested: run_dir=%s, device=%s", run_dir, device)
     cfg = TrainingConfig(

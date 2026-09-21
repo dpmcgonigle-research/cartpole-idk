@@ -3,9 +3,11 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from cartpole_idk.analytics import build_units, fit_embeddings, pairwise
 from cartpole_idk.idk.config import IDKExperimentConfig
+from cartpole_idk.idk.embedding import represented_units
 from cartpole_idk.idk.features import build_sequence_batch
+from cartpole_idk.idk.fitting import fit_sequence_batch
+from cartpole_idk.idk.units import build_units
 
 
 def test_windows_provenance_and_boundaries(trajectory):
@@ -41,10 +43,13 @@ def test_reuse_all_representations(trajectory, representation, samples, width):
     units = build_units([trajectory])
     batch = build_sequence_batch([units.units[0].trajectory], config)
     assert batch.values.shape == (samples, width)
-    basis = fit_embeddings(units, config)
-    assert basis.fitting.values.shape == (1, 6)
+    reference = fit_sequence_batch(batch, [u.unit_id for u in units.units], config)
+    assert reference.reference_embeddings.shape == (1, 6)
     np.testing.assert_allclose(
-        basis.fitting.values.toarray(), basis.transform(units).values.toarray()
+        reference.reference_embeddings.toarray(),
+        reference.model.transform(
+            batch.with_values(reference.scaler.transform(batch.values))
+        ).toarray(),
     )
 
 
@@ -61,33 +66,11 @@ def test_empty_representation_is_reported(trajectory):
         truncated=trajectory.truncated[:1],
     )
     cfg = IDKExperimentConfig(representation="window", window_length=3, psi=2, t=2)
-    fitted = fit_embeddings(build_units([trajectory, short]), cfg)
-    assert len(fitted.fitting.units) == 1
-    assert fitted.fitting.skipped[0]["reason"] == "empty_representation"
+    valid, batch = represented_units(build_units([trajectory, short]), cfg)
+    assert len(valid.units) == batch.n_sequences == 1
+    assert valid.skipped[0]["reason"] == "empty_representation"
     with pytest.raises(ValueError, match="empty representations"):
-        fitted.transform(build_units([short]))
-
-
-def test_fit_transform_does_not_leak_labels_or_query_values(trajectory):
-    config = IDKExperimentConfig(psi=2, t=4)
-    fitted = fit_embeddings(build_units([trajectory]), config)
-    mean = fitted.reference.scaler.mean_.copy()
-    centers = fitted.reference.model.point_kernel.basis_.centers.copy()
-    query = replace(
-        trajectory,
-        trajectory_id="query",
-        true_observations=trajectory.true_observations + 1000,
-        metadata={"success": False, "perturbation_type": "novel"},
-    )
-    embedded = fitted.transform(build_units([query]))
-    np.testing.assert_array_equal(mean, fitted.reference.scaler.mean_)
-    np.testing.assert_array_equal(centers, fitted.reference.model.point_kernel.basis_.centers)
-    assert embedded.values.nnz == 0
-    relabeled = replace(trajectory, metadata={"success": True, "group": "failure"})
-    refit = fit_embeddings(build_units([relabeled]), config)
-    np.testing.assert_array_equal(centers, refit.reference.model.point_kernel.basis_.centers)
-    with pytest.raises(ValueError, match="same fitted basis"):
-        pairwise(fitted.fitting, refit.fitting)
+        represented_units(build_units([short]), cfg)
 
 
 def test_prepared_prefix_is_censored(trajectory):

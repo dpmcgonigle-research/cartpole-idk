@@ -1,7 +1,7 @@
 import logging
 
 
-def configure_logging(log_level: int=logging.INFO) -> None:
+def configure_logging(log_level: int = logging.INFO) -> None:
     """Show CLI progress on stderr without interfering with stdout results."""
     msg_format = (
         "[%(asctime)s] p%(process)s {%(filename)s "

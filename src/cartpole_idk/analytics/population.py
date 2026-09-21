@@ -9,8 +9,8 @@ import numpy as np
 from scipy.sparse import vstack
 from sklearn.metrics.pairwise import euclidean_distances
 
-from cartpole_idk.analytics.embeddings import EmbeddingSet
 from cartpole_idk.analytics.metrics import DEFAULT_MAX_PAIRS, check_pairwise_size
+from cartpole_idk.storage.embeddings import EmbeddingSet
 
 
 @dataclass(frozen=True, slots=True)

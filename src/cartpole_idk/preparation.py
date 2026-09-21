@@ -11,8 +11,8 @@ import numpy as np
 
 from cartpole_idk.storage import Trajectory, TrajectoryStore
 
-
 logger = logging.getLogger(__name__)
+
 
 def prepare_dataset(
     dataset: str | Path | Sequence[str | Path],

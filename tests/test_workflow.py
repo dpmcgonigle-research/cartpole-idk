@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cartpole_idk.cli import evaluate_idk, generate, query
+from cartpole_idk.cli import generate, query
 from cartpole_idk.idk import IDKExperimentConfig, fit_reference, trajectory_familiarity
 from cartpole_idk.storage import TrajectoryStore
 from cartpole_idk.training import TrainingConfig, load_checkpoint, train
@@ -93,22 +93,3 @@ def test_generate_query_and_evaluate_workflow(trained_run, tmp_path, monkeypatch
     query.main(standalone_mode=False)
     output = capsys.readouterr().out
     assert all(tid in output for tid in ids)
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "cartpole-idk-evaluate",
-            str(dataset),
-            "--reference-ids",
-            *ids,
-            "--query-ids",
-            ids[0],
-            "--psi",
-            "2",
-            "--t",
-            "4",
-        ],
-    )
-    evaluate_idk.main(standalone_mode=False)
-    tid, score = capsys.readouterr().out.strip().split("\t")
-    assert tid == ids[0]
-    assert np.isfinite(float(score))

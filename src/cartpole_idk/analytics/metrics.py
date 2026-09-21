@@ -12,7 +12,7 @@ from scipy.sparse import csr_matrix
 from scipy.spatial.distance import jensenshannon
 from scipy.special import rel_entr
 
-from cartpole_idk.analytics.embeddings import EmbeddingSet
+from cartpole_idk.storage.embeddings import EmbeddingSet
 
 DEFAULT_MAX_PAIRS = 4_000_000
 

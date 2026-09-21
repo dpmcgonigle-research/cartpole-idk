@@ -7,7 +7,6 @@ from scipy.sparse import csr_matrix
 from cartpole_idk.analytics import (
     ClusterConfig,
     EmbeddingSet,
-    build_units,
     cluster_purity,
     cluster_summary,
     cluster_units,
@@ -18,6 +17,7 @@ from cartpole_idk.analytics import (
     rolling_likeness,
     top_k_neighbors,
 )
+from cartpole_idk.idk.units import build_units
 
 
 @pytest.fixture
@@ -117,7 +117,7 @@ def test_precomputed_clustering_and_js(embedded):
     first = cluster_units(embedded, config)
     second = cluster_units(embedded, config, precomputed=distances)
     np.testing.assert_array_equal(first.labels, second.labels)
-    js = cluster_units(embedded, replace(config, distance="js"))
+    js = cluster_units(embedded, config.model_copy(update={"distance": "js"}))
     np.testing.assert_allclose(js.distances**2, pairwise(embedded, metric="js"), atol=1e-14)
 
 

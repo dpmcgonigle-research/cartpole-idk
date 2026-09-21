@@ -25,6 +25,26 @@ def main(
     episode_start,
     seed,
 ) -> None:
+    """Extract contiguous segments from one or more generated datasets.
+
+    \b
+    Args:
+        dataset: One or more source dataset directories.
+        output: New or empty directory for the combined prepared dataset.
+        episode_length: Maximum transitions per retained segment.
+        min_episode_length: Discard segments shorter than this many transitions.
+        success_threshold: Source trajectory length required for success.
+        success_buffer: Keep successful segments entirely before
+            success_threshold minus this many transitions.
+        episode_start: Fixed start timestep; omitted means uniformly sampled
+            valid starts for successes and the final segment for failures.
+        seed: Random seed for successful-segment sampling.
+
+    Notes:
+
+        Success is determined by trajectory length. Fixed starts still obey
+        the success boundary and minimum length. Source provenance is retained.
+    """
     configure_logging()
     try:
         store = prepare_dataset(

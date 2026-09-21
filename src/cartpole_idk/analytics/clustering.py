@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -11,24 +11,9 @@ from sklearn.cluster import DBSCAN, HDBSCAN, SpectralClustering
 from sklearn.decomposition import TruncatedSVD
 from sklearn.mixture import BayesianGaussianMixture
 
-from cartpole_idk.analytics.embeddings import EmbeddingSet
 from cartpole_idk.analytics.metrics import DEFAULT_MAX_PAIRS, pairwise
-
-
-@dataclass(frozen=True, slots=True)
-class ClusterConfig:
-    algorithm: Literal["hdbscan", "dbscan", "spectral", "dpgmm"] = "hdbscan"
-    distance: Literal["idk-distance", "js"] = "idk-distance"
-    eps: float = 0.1
-    min_samples: int | None = None
-    min_cluster_size: int = 5
-    cluster_selection_method: Literal["eom", "leaf"] = "eom"
-    n_clusters: int = 2
-    random_state: int = 42
-    svd_components: int = 10
-    n_components: int = 10
-    max_iter: int = 500
-    weight_concentration_prior: float | None = None
+from cartpole_idk.model import ClusterConfig
+from cartpole_idk.storage.embeddings import EmbeddingSet
 
 
 @dataclass(slots=True)

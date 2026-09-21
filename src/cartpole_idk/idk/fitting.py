@@ -33,13 +33,20 @@ def fit_sequence_batch(
     """Fit scaler and pyidk basis exclusively on the supplied fitting sequences."""
     if len(sequence_ids) != batch.n_sequences or (batch.lengths == 0).any():
         raise ValueError("Provide one ID per nonempty fitting sequence")
+    scaler, model = fit_basis(batch, config)
+    scaled = batch.with_values(scaler.transform(batch.values))
+    embeddings = model.transform(scaled)
+    return IDKReference(config, scaler, model, embeddings, list(sequence_ids))
+
+
+def fit_basis(
+    batch: SequenceBatch, config: IDKExperimentConfig
+) -> tuple[Standardizer, IsolationDistributionalKernel]:
+    """Fit the reusable scaler and basis without generating distribution embeddings."""
     scaler = Standardizer().fit(batch.values)
     scaled = batch.with_values(scaler.transform(batch.values))
     point_kernel = IsolationKernel(
-        n_partitions=config.t,
-        samples_per_partition=config.psi,
-        random_state=config.random_state,
+        n_partitions=config.t, samples_per_partition=config.psi, random_state=config.random_state
     )
-    model = IsolationDistributionalKernel(point_kernel)
-    embeddings = model.fit_transform(scaled)
-    return IDKReference(config, scaler, model, embeddings, list(sequence_ids))
+    model = IsolationDistributionalKernel(point_kernel).fit(scaled)
+    return scaler, model
