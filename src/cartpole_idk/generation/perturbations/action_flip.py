@@ -10,6 +10,8 @@ from cartpole_idk.generation.perturbations.base import Perturbation
 
 @dataclass(slots=True)
 class ActionFlip(Perturbation):
+    """Randomly reverse binary CartPole actions after a sampled onset."""
+
     onset: NormalOnset
     probability: float = 0.15
     name: str = field(default="action_flip", init=False)
@@ -17,6 +19,12 @@ class ActionFlip(Perturbation):
     _rng: np.random.Generator | None = field(default=None, init=False)
 
     def reset(self, rng: np.random.Generator, max_steps: int) -> dict:
+        """Sample onset and retain the episode random generator.
+
+        Args:
+            rng: Episode random generator for onset and stochastic effects.
+            max_steps: Episode horizon used to cap onset at max_steps - 1.
+        """
         if not 0 <= self.probability <= 1:
             raise ValueError("probability must be in [0, 1]")
         self._rng = rng
@@ -26,6 +34,12 @@ class ActionFlip(Perturbation):
         return {"onset": self._onset_step, "flip_probability": self.probability}
 
     def executed_action(self, commanded_action: int, step: int) -> int:
+        """Flip the command with the configured probability after onset.
+
+        Args:
+            commanded_action: Current binary action selected by the policy.
+            step: Zero-based episode timestep used to check perturbation onset.
+        """
         if step >= self._onset_step and self._rng is not None:
             if self._rng.random() < self.probability:
                 return 1 - int(commanded_action)

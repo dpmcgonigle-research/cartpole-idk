@@ -15,6 +15,8 @@ from cartpole_idk.storage.embeddings import EmbeddingSet
 
 @dataclass(frozen=True, slots=True)
 class MMDResult:
+    """Squared population MMD with bandwidth, sample counts, and optional permutation p-value."""
+
     statistic: float
     bandwidth: float
     estimator: str
@@ -43,6 +45,15 @@ def population_mmd(
     bandwidth is frozen throughout permutations. Permutation units are embedding
     rows: meaningful p-values require exchangeability (overlapping windows are
     generally dependent). Use whole trajectories or independent units for inference.
+
+    Args:
+        a: First population of embeddings.
+        b: Second population using the same fitted model.
+        bandwidth: RBF sigma; None uses the median positive pooled distance.
+        estimator: biased includes self-pairs; unbiased excludes them.
+        n_permutations: Number of row-label shuffles; zero skips the significance test.
+        random_state: Seed for permutation sampling.
+        max_pairs: Maximum entries in the pooled dense pairwise matrix.
     """
     a.compatible_with(b)
     na, nb = len(a.units), len(b.units)
@@ -67,6 +78,11 @@ def population_mmd(
     kernel = np.exp(-squared / (2 * bandwidth**2))
 
     def statistic(order: np.ndarray) -> float:
+        """Evaluate the configured MMD estimator for a proposed group assignment.
+
+        Args:
+            order: Pooled row indices, with the first na assigned to group A.
+        """
         ia, ib = order[:na], order[na:]
         aa, bb, ab = kernel[np.ix_(ia, ia)], kernel[np.ix_(ib, ib)], kernel[np.ix_(ia, ib)]
         if estimator == "biased":

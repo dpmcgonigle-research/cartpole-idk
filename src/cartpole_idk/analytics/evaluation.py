@@ -10,7 +10,12 @@ from sklearn.metrics import adjusted_mutual_info_score, silhouette_score
 
 
 def cluster_purity(labels: np.ndarray, categories: np.ndarray) -> float | None:
-    """Fraction in the dominant category of each cluster; missing categories excluded."""
+    """Fraction in the dominant category of each cluster; missing categories excluded.
+
+    Args:
+        labels: Cluster assignment per unit; callers decide whether to exclude noise.
+        categories: Metadata category per unit, aligned with labels.
+    """
     frame = pd.DataFrame({"cluster": labels, "category": categories}).dropna()
     if frame.empty:
         return None
@@ -25,7 +30,14 @@ def evaluate_clusters(
     categorical: tuple[str, ...] = ("perturbation_type", "checkpoint_id"),
     exclude_noise: bool = True,
 ) -> dict[str, Any]:
-    """Exclude all negative noise labels by default. Undefined silhouette is null."""
+    """Exclude all negative noise labels by default. Undefined silhouette is null.
+
+    Args:
+        assignments: Unit table containing cluster labels and optional metadata categories.
+        distances: Aligned pairwise distance matrix for silhouette, or None to skip it.
+        categorical: Metadata columns to compare against cluster assignments.
+        exclude_noise: Exclude negative cluster labels from validity scores.
+    """
     labels = assignments["cluster"].to_numpy()
     keep = labels >= 0 if exclude_noise else np.ones(len(labels), dtype=bool)
     selected = labels[keep]
@@ -63,7 +75,12 @@ def cluster_summary(
     *,
     categorical: tuple[str, ...] = ("perturbation_type", "checkpoint_id"),
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Return per-cluster return statistics and tidy category counts, including noise."""
+    """Return per-cluster return statistics and tidy category counts, including noise.
+
+    Args:
+        assignments: Unit table containing cluster, episode_return, and metadata columns.
+        categorical: Metadata fields to tabulate within each cluster.
+    """
     summaries, composition = [], []
     for cluster, frame in assignments.groupby("cluster", sort=True):
         row: dict[str, Any] = {"cluster": cluster, "count": len(frame)}

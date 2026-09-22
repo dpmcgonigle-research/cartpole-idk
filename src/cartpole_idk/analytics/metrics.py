@@ -18,6 +18,13 @@ DEFAULT_MAX_PAIRS = 4_000_000
 
 
 def check_pairwise_size(n: int, m: int, max_pairs: int = DEFAULT_MAX_PAIRS) -> None:
+    """Reject dense pairwise allocations larger than the configured limit.
+
+    Args:
+        n: Number of query rows.
+        m: Number of reference rows.
+        max_pairs: Maximum allowed matrix entries.
+    """
     if max_pairs < 1 or n * m > max_pairs:
         raise ValueError(
             f"Pairwise result needs {n * m:,} entries (limit {max_pairs:,}); "
@@ -28,6 +35,14 @@ def check_pairwise_size(n: int, m: int, max_pairs: int = DEFAULT_MAX_PAIRS) -> N
 def _inputs(
     x: csr_matrix, y: csr_matrix | None, t: int, max_pairs: int
 ) -> tuple[csr_matrix, csr_matrix]:
+    """Normalize sparse inputs and validate dimensions and pairwise allocation size.
+
+    Args:
+        x: Query embedding rows, with t * psi columns.
+        y: Reference embedding rows; None compares x with itself.
+        t: Number of isolation partitions.
+        max_pairs: Maximum entries in the dense query-by-reference result.
+    """
     x = csr_matrix(x, dtype=float)
     y = x if y is None else csr_matrix(y, dtype=float)
     if t < 1 or x.shape[1] != y.shape[1] or x.shape[1] % t:
@@ -41,7 +56,14 @@ def _inputs(
 def pairwise_idk_similarity(
     x: csr_matrix, y: csr_matrix | None = None, *, t: int, max_pairs: int = DEFAULT_MAX_PAIRS
 ) -> np.ndarray:
-    """Native pyidk dot-product/t similarity; self-similarity need not equal one."""
+    """Native pyidk dot-product/t similarity; self-similarity need not equal one.
+
+    Args:
+        x: Query embedding rows, with t * psi columns.
+        y: Reference embedding rows; None compares x with itself.
+        t: Number of isolation partitions.
+        max_pairs: Maximum entries in the dense query-by-reference result.
+    """
     x, y = _inputs(x, y, t, max_pairs)
     return pairwise_similarity(x, y, n_partitions=t, dense=True)
 
@@ -49,7 +71,14 @@ def pairwise_idk_similarity(
 def pairwise_idk_distance(
     x: csr_matrix, y: csr_matrix | None = None, *, t: int, max_pairs: int = DEFAULT_MAX_PAIRS
 ) -> np.ndarray:
-    """Kernel-induced distance = ||mu_x - mu_y|| / sqrt(t), roundoff clipped."""
+    """Kernel-induced distance = ||mu_x - mu_y|| / sqrt(t), roundoff clipped.
+
+    Args:
+        x: Query embedding rows, with t * psi columns.
+        y: Reference embedding rows; None compares x with itself.
+        t: Number of isolation partitions.
+        max_pairs: Maximum entries in the dense query-by-reference result.
+    """
     self_pair = y is None or y is x
     x, y = _inputs(x, y, t, max_pairs)
     xx = np.asarray(x.multiply(x).sum(axis=1)).ravel() / t
@@ -64,7 +93,14 @@ def pairwise_idk_distance(
 def pairwise_cosine(
     x: csr_matrix, y: csr_matrix | None = None, *, t: int = 1, max_pairs: int = DEFAULT_MAX_PAIRS
 ) -> np.ndarray:
-    """Cosine similarity. Every comparison involving a zero vector is zero."""
+    """Cosine similarity. Every comparison involving a zero vector is zero.
+
+    Args:
+        x: Query embedding rows, with t * psi columns.
+        y: Reference embedding rows; None compares x with itself.
+        t: Partition count for shape validation; cosine needs no t normalization.
+        max_pairs: Maximum entries in the dense query-by-reference result.
+    """
     x, y = _inputs(x, y, t, max_pairs)
     norms = (
         np.sqrt(np.asarray(x.multiply(x).sum(axis=1)))
@@ -76,6 +112,13 @@ def pairwise_cosine(
 
 def _occupancy(x: csr_matrix, partition: int, psi: int) -> np.ndarray:
     # Densify one partition at a time, not all t * psi features.
+    """Recover one partition's probabilities, including its outside-region mass.
+
+    Args:
+        x: Sparse mean-occupancy embedding rows.
+        partition: Zero-based isolation partition index.
+        psi: Number of regions per partition.
+    """
     block = x[:, partition * psi : (partition + 1) * psi].toarray()
     mass = block.sum(axis=1)
     if np.any(block < -1e-10) or np.any(mass > 1 + 1e-10):
@@ -89,6 +132,15 @@ def _occupancy(x: csr_matrix, partition: int, psi: int) -> np.ndarray:
 def _divergence(
     x: csr_matrix, y: csr_matrix | None, *, t: int, epsilon: float | None, max_pairs: int
 ) -> np.ndarray:
+    """Compute partition-averaged JS or smoothed KL divergence in bounded blocks.
+
+    Args:
+        x: Query embedding rows, with t * psi columns.
+        y: Reference embedding rows; None compares x with itself.
+        t: Number of isolation partitions.
+        max_pairs: Maximum entries in the dense query-by-reference result.
+        epsilon: KL smoothing mass per cell; None selects unsmoothed JS.
+    """
     x, y = _inputs(x, y, t, max_pairs)
     psi = x.shape[1] // t
     if psi < 1:
@@ -115,7 +167,14 @@ def _divergence(
 def pairwise_js_divergence(
     x: csr_matrix, y: csr_matrix | None = None, *, t: int, max_pairs: int = DEFAULT_MAX_PAIRS
 ) -> np.ndarray:
-    """Mean partition JS divergence (natural logs), including outside occupancy."""
+    """Mean partition JS divergence (natural logs), including outside occupancy.
+
+    Args:
+        x: Query embedding rows, with t * psi columns.
+        y: Reference embedding rows; None compares x with itself.
+        t: Number of isolation partitions.
+        max_pairs: Maximum entries in the dense query-by-reference result.
+    """
     return _divergence(x, y, t=t, epsilon=None, max_pairs=max_pairs)
 
 
@@ -130,6 +189,13 @@ def pairwise_kl_divergence(
     """KL(query || reference), averaged over partitions, with explicit smoothing.
 
     Add epsilon to every cell INCLUDING outside, then renormalize. Asymmetric.
+
+    Args:
+        x: Query embedding rows, with t * psi columns.
+        y: Reference embedding rows; None compares x with itself.
+        t: Number of isolation partitions.
+        max_pairs: Maximum entries in the dense query-by-reference result.
+        epsilon: Positive mass added to every occupancy cell before renormalization.
     """
     if not np.isfinite(epsilon) or epsilon <= 0:
         raise ValueError("KL requires finite epsilon > 0")
@@ -138,6 +204,8 @@ def pairwise_kl_divergence(
 
 @dataclass(frozen=True, slots=True)
 class Metric:
+    """Pairwise metric implementation, preferred ranking direction, and display description."""
+
     function: Callable[..., np.ndarray]
     direction: Literal["higher", "lower"]
     description: str
@@ -160,7 +228,15 @@ def pairwise(
     max_pairs: int = DEFAULT_MAX_PAIRS,
     **parameters: Any,
 ) -> np.ndarray:
-    """Dispatch using metric metadata and enforce shared fitting-space identity."""
+    """Dispatch using metric metadata and enforce shared fitting-space identity.
+
+    Args:
+        query: Query embeddings defining result rows.
+        reference: Compatible reference embeddings defining columns; None uses query.
+        metric: Registered similarity or distance name.
+        max_pairs: Maximum entries in the dense result.
+        **parameters: Metric-specific arguments, such as positive epsilon for KL.
+    """
     if metric not in METRICS:
         raise ValueError(f"Unknown metric: {metric}")
     if reference is not None:

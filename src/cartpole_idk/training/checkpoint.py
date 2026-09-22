@@ -12,6 +12,14 @@ logger = logging.getLogger(__name__)
 
 
 def save_checkpoint(agent: DQNAgent, path: Path, *, step: int, metadata: dict[str, Any]) -> None:
+    """Save policy weights, architecture, and provenance; optimizer state is not included.
+
+    Args:
+        agent: DQN policy whose online-network weights are saved.
+        path: Destination checkpoint file; parent directories are created.
+        step: Training environment-step count at checkpoint time.
+        metadata: Training settings and evaluation information to retain.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
         {
@@ -29,6 +37,12 @@ def save_checkpoint(agent: DQNAgent, path: Path, *, step: int, metadata: dict[st
 
 
 def load_checkpoint(path: str | Path, *, device: str = "cpu") -> tuple[DQNAgent, dict]:
+    """Load policy weights into an agent and return it with the checkpoint payload.
+
+    Args:
+        path: Saved policy checkpoint file.
+        device: PyTorch device on which to reconstruct the policy.
+    """
     logger.info("Loading checkpoint %s on %s", path, device)
     payload = torch.load(path, map_location=device, weights_only=False)
     agent = DQNAgent(

@@ -6,7 +6,12 @@ from cartpole_idk.storage import Trajectory
 
 
 def replay_trajectory(trajectory: Trajectory, *, fps: float = 50.0) -> None:
-    """Replay recorded true CartPole states using pygame."""
+    """Replay recorded true CartPole states using pygame.
+
+    Args:
+        trajectory: Stored trajectory whose true observations are animated.
+        fps: Playback frames per second.
+    """
     import pygame
 
     width, height = 600, 400

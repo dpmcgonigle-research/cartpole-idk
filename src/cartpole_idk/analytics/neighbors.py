@@ -14,6 +14,8 @@ from cartpole_idk.storage.embeddings import EmbeddingSet
 
 @dataclass(slots=True)
 class NeighborResult:
+    """Ranked query/reference matches and one aggregate score row per query unit."""
+
     neighbors: pd.DataFrame
     scores: pd.DataFrame
 
@@ -35,6 +37,17 @@ def top_k_neighbors(
     max_overlap excludes same-source intervals whose intersection divided by the
     shorter interval exceeds this threshold. No eligible neighbors yields count=0
     and a missing mean score, rather than an invented familiarity value.
+
+    Args:
+        query: Units to score, with their embeddings.
+        reference: Candidate neighbors embedded with the same fitted model.
+        metric: Registered metric controlling both comparison and ranking direction.
+        k: Maximum number of eligible neighbors per query.
+        exclude_same_unit: Exclude identical units or matching source intervals.
+        exclude_same_trajectory: Exclude every unit from the same original source trajectory.
+        max_overlap: Maximum intersection/shorter-length ratio for same-source intervals.
+        max_pairs: Maximum entries in the dense query-by-reference matrix.
+        metric_parameters: Extra metric arguments, such as epsilon for KL.
     """
     if k < 1 or (max_overlap is not None and not 0 <= max_overlap <= 1):
         raise ValueError("Require k >= 1 and max_overlap in [0, 1]")
@@ -121,7 +134,15 @@ def reference_likeness(
     metric: str = "idk",
     **options: Any,
 ) -> tuple[pd.DataFrame, dict[str, NeighborResult]]:
-    """Keep both scores; positive margin always means more nominal-like."""
+    """Keep both scores; positive margin always means more nominal-like.
+
+    Args:
+        query: Units to compare against both populations.
+        nominal: Nominal reference embeddings.
+        failure: Failure reference embeddings.
+        metric: Registered metric used for both comparisons.
+        **options: Neighbor selection and metric settings passed to top_k_neighbors.
+    """
     results = {
         "nominal": top_k_neighbors(query, nominal, metric=metric, **options),
         "failure": top_k_neighbors(query, failure, metric=metric, **options),
@@ -142,7 +163,14 @@ def rolling_likeness(
     metrics: tuple[str, ...] = ("idk",),
     **options: Any,
 ) -> pd.DataFrame:
-    """One row per query window, metric and reference group; no plotting or refitting."""
+    """One row per query window, metric and reference group; no plotting or refitting.
+
+    Args:
+        query: Precomputed window embeddings to score in their stored order.
+        references: Named reference populations sharing the query's fitted model.
+        metrics: Registered metrics to compute for each reference group.
+        **options: Neighbor selection and metric settings passed to top_k_neighbors.
+    """
     tables = []
     for metric in metrics:
         for group, reference in references.items():

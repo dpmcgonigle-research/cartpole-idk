@@ -10,6 +10,13 @@ from cartpole_idk.storage.trajectory import Trajectory
 
 @dataclass(frozen=True, slots=True)
 class AnalysisUnit:
+    """One whole trajectory or contiguous window represented by a single embedding.
+
+    The half-open [start_step, end_step) interval is local to trajectory_id.
+    Metadata retains source provenance; trajectory holds the raw segment during
+    fitting/embedding and is absent when loaded for analytics.
+    """
+
     unit_id: str
     trajectory_id: str
     start_step: int
@@ -19,6 +26,7 @@ class AnalysisUnit:
 
     @property
     def raw_length(self) -> int:
+        """Number of transitions in this unit, excluding the final boundary observation."""
         return self.end_step - self.start_step
 
     @property
@@ -30,6 +38,7 @@ class AnalysisUnit:
         )
 
     def record(self) -> dict[str, Any]:
+        """Flatten provenance and interval fields into a row for tables and reports."""
         return {
             **self.metadata,
             "unit_id": self.unit_id,

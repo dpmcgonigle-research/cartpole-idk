@@ -9,12 +9,24 @@ from cartpole_idk.storage import Trajectory
 
 
 def _observations(traj: Trajectory, source: str) -> np.ndarray:
+    """Select the requested observation stream from a trajectory.
+
+    Args:
+        traj: Recorded episode or segment.
+        source: true for environment states; agent for policy observations.
+    """
     return traj.true_observations if source == "true" else traj.agent_observations
 
 
 def build_sequence_batch(
     trajectories: list[Trajectory], config: IDKExperimentConfig
 ) -> SequenceBatch:
+    """Convert trajectories to feature sequences without scaling or fitting IDK.
+
+    Args:
+        trajectories: Raw episodes or segments, in the desired sequence order.
+        config: Representation, observation/action sources, and temporal feature length.
+    """
     sequences: list[np.ndarray] = []
     for traj in trajectories:
         obs = _observations(traj, config.observation_source)

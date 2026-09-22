@@ -12,6 +12,8 @@ from cartpole_idk.storage import TrajectoryStore
 
 @dataclass(slots=True)
 class IDKReference:
+    """In-memory fitted scaler/basis and reference embeddings for familiarity scoring."""
+
     config: IDKExperimentConfig
     scaler: Standardizer
     model: IsolationDistributionalKernel
@@ -22,6 +24,13 @@ class IDKReference:
 def fit_reference(
     store: TrajectoryStore, trajectory_ids: list[str], config: IDKExperimentConfig
 ) -> IDKReference:
+    """Fit IDK on selected trajectories and retain their reference embeddings.
+
+    Args:
+        store: Dataset supplying the raw fitting trajectories.
+        trajectory_ids: Ordered IDs defining the fitting and reference population.
+        config: Representation, standardization, and isolation-partition settings.
+    """
     trajectories = [store.get(tid) for tid in trajectory_ids]
     batch = build_sequence_batch(trajectories, config)
     return fit_sequence_batch(batch, trajectory_ids, config)
@@ -30,7 +39,13 @@ def fit_reference(
 def fit_sequence_batch(
     batch: SequenceBatch, sequence_ids: list[str], config: IDKExperimentConfig
 ) -> IDKReference:
-    """Fit scaler and pyidk basis exclusively on the supplied fitting sequences."""
+    """Fit scaler and pyidk basis exclusively on the supplied fitting sequences.
+
+    Args:
+        batch: Unscaled, nonempty feature sequences used for fitting.
+        sequence_ids: One provenance identifier per sequence, in batch order.
+        config: IDK partition count, sample count, and random seed.
+    """
     if len(sequence_ids) != batch.n_sequences or (batch.lengths == 0).any():
         raise ValueError("Provide one ID per nonempty fitting sequence")
     scaler, model = fit_basis(batch, config)
@@ -42,7 +57,12 @@ def fit_sequence_batch(
 def fit_basis(
     batch: SequenceBatch, config: IDKExperimentConfig
 ) -> tuple[Standardizer, IsolationDistributionalKernel]:
-    """Fit the reusable scaler and basis without generating distribution embeddings."""
+    """Fit the reusable scaler and basis without generating distribution embeddings.
+
+    Args:
+        batch: Unscaled feature sequences defining the fitting population.
+        config: IDK partition count, sampled centers per partition, and random seed.
+    """
     scaler = Standardizer().fit(batch.values)
     scaled = batch.with_values(scaler.transform(batch.values))
     point_kernel = IsolationKernel(

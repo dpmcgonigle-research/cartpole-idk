@@ -23,12 +23,22 @@ logger = logging.getLogger(__name__)
 
 
 def execute_analysis(config: AnalysisConfig) -> None:
-    """Load compatible artifacts and perform exactly one typed analysis operation."""
+    """Load compatible artifacts and perform exactly one typed analysis operation.
+
+    Args:
+        config: Artifact paths, population roles, metric settings, and output directory.
+    """
     cache: dict[Path, EmbeddingArtifact] = {}
     inputs: dict[str, AnalysisInput] = {}
     populations: dict[str, EmbeddingSet] = {}
 
     def load(role: str, path: Path) -> EmbeddingSet:
+        """Load a compatible population once and register its analysis role.
+
+        Args:
+            role: Population name used in output provenance.
+            path: Embedding artifact directory.
+        """
         path = path.resolve()
         if path not in cache:
             cache[path] = EmbeddingArtifact.load(path)

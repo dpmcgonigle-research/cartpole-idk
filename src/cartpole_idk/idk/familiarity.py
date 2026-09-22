@@ -10,6 +10,13 @@ from cartpole_idk.storage import Trajectory
 def trajectory_familiarity(
     reference: IDKReference, trajectories: list[Trajectory], *, k: int = 5
 ) -> np.ndarray:
+    """Return mean top-k reference similarity for each query trajectory.
+
+    Args:
+        reference: Fitted scaler, basis, and reference embeddings to reuse.
+        trajectories: Raw query trajectories to transform and score.
+        k: Maximum reference neighbors averaged per query.
+    """
     if k < 1:
         raise ValueError("k must be >= 1")
     batch = build_sequence_batch(trajectories, reference.config)

@@ -20,6 +20,12 @@ class ActionDelay(Perturbation):
     _queue: deque[int] = field(default_factory=deque, init=False)
 
     def reset(self, rng: np.random.Generator, max_steps: int) -> dict:
+        """Sample onset and clear the delay queue for a new episode.
+
+        Args:
+            rng: Episode random generator for onset and stochastic effects.
+            max_steps: Episode horizon used to cap onset at max_steps - 1.
+        """
         if self.delay_steps < 1:
             raise ValueError("delay_steps must be >= 1")
         self._onset_step = NormalOnset(
@@ -29,6 +35,12 @@ class ActionDelay(Perturbation):
         return {"onset": self._onset_step, "delay_steps": self.delay_steps}
 
     def executed_action(self, commanded_action: int, step: int) -> int:
+        """Return the delayed command.
+
+        Args:
+            commanded_action: Current binary action selected by the policy.
+            step: Zero-based episode timestep used to check perturbation onset.
+        """
         if step < self._onset_step:
             return int(commanded_action)
         self._queue.append(int(commanded_action))

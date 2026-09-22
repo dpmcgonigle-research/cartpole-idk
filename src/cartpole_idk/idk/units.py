@@ -15,10 +15,16 @@ from cartpole_idk.storage.units import AnalysisUnit
 
 @dataclass(slots=True)
 class UnitCollection:
+    """Ordered whole-trajectory or window units, plus reasons for skipped inputs.
+
+    Units retain raw segments during fitting/embedding; the manifest exposes provenance.
+    """
+
     units: list[AnalysisUnit]
     skipped: list[dict[str, Any]] = field(default_factory=list)
 
     def manifest(self) -> pd.DataFrame:
+        """Return one metadata row per retained unit, in collection order."""
         return pd.DataFrame([unit.record() for unit in self.units])
 
 
@@ -34,6 +40,12 @@ def build_units(
     An L-transition segment includes L+1 observations. Episode termination is only
     known when a stored terminal/truncation flag is present. Prepared prefixes are
     therefore censored, even when the original episode length is in provenance.
+
+    Args:
+        trajectories: Stored episodes or prepared segments to divide into units.
+        mode: Use each full stored trajectory or extract complete windows.
+        window_length: Transitions per window; unused in whole mode.
+        stride: Transitions between window starts; unused in whole mode.
     """
     if mode not in {"whole", "window"} or window_length < 1 or stride < 1:
         raise ValueError("Require whole/window mode and positive window_length and stride")

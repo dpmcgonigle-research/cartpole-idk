@@ -11,6 +11,13 @@ from sklearn.decomposition import TruncatedSVD
 
 
 def plot_pairwise(matrix: np.ndarray, *, title: str = "Pairwise metric", ax: Any = None) -> Any:
+    """Display a query-by-reference metric matrix and return its axes.
+
+    Args:
+        matrix: Dense pairwise scores or distances.
+        title: Plot title.
+        ax: Existing matplotlib axes, or None to create them.
+    """
     import matplotlib.pyplot as plt
 
     if ax is None:
@@ -24,7 +31,13 @@ def plot_pairwise(matrix: np.ndarray, *, title: str = "Pairwise metric", ax: Any
 def plot_rolling(
     table: pd.DataFrame, *, scores: tuple[str, ...] = ("score",), ax: Any = None
 ) -> Any:
-    """One curve per trajectory, metric, reference group and score column."""
+    """One curve per trajectory, metric, reference group and score column.
+
+    Args:
+        table: Window scores with end_step and optional trajectory/metric/group columns.
+        scores: Score columns to draw as separate curves.
+        ax: Existing matplotlib axes, or None to create them.
+    """
     import matplotlib.pyplot as plt
 
     if ax is None:
@@ -43,6 +56,13 @@ def plot_rolling(
 def plot_cluster_composition(
     composition: pd.DataFrame, *, field: str = "perturbation_type", ax: Any = None
 ) -> Any:
+    """Plot stacked metadata-category counts per cluster and return its axes.
+
+    Args:
+        composition: Tidy cluster summary with field, value, cluster, and count columns.
+        field: Metadata category to display.
+        ax: Existing matplotlib axes, or None to create them.
+    """
     counts = (
         composition[composition.field == field]
         .pivot(index="cluster", columns="value", values="count")
@@ -58,7 +78,14 @@ def plot_embedding_2d(
     random_state: int = 42,
     ax: Any = None,
 ) -> tuple[Any, np.ndarray]:
-    """Sparse SVD display coordinates only; this projection is not clustering evidence."""
+    """Sparse SVD display coordinates only; this projection is not clustering evidence.
+
+    Args:
+        embeddings: Sparse unit-by-feature embedding matrix.
+        labels: Optional numeric color labels aligned with embedding rows.
+        random_state: Seed for the two-component SVD projection.
+        ax: Existing matplotlib axes, or None to create them.
+    """
     import matplotlib.pyplot as plt
 
     if min(embeddings.shape) < 2:

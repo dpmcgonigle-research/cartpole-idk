@@ -29,6 +29,16 @@ def prepare_dataset(
 
     Lengths count transitions; observations include the final next state.
     An explicit start overrides failure-tail selection as well as random starts.
+
+    Args:
+        dataset: One or more generated dataset directories to combine.
+        output: New or empty destination dataset directory.
+        episode_length: Maximum number of transitions in a retained segment.
+        min_episode_length: Minimum retained segment length; shorter segments are skipped.
+        success_threshold: Source trajectory length required to classify a run as successful.
+        success_buffer: Gap before the success threshold within which segments must end.
+        episode_start: Fixed start, or None for uniform success starts and failure tails.
+        seed: Random seed for successful-segment sampling.
     """
     if not 1 <= min_episode_length <= episode_length:
         raise ValueError("Require 1 <= min_episode_length <= episode_length")

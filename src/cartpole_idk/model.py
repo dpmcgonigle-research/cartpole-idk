@@ -22,6 +22,11 @@ class ReturnStatistics(BaseModel):
 
     @staticmethod
     def from_returns(returns: list[float]) -> ReturnStatistics | None:
+        """Summarize episode returns; return None for an empty population.
+
+        Args:
+            returns: One summed reward value per trajectory.
+        """
         if not returns:
             return None
         values = np.asarray(returns, dtype=float)
@@ -38,6 +43,8 @@ class ReturnStatistics(BaseModel):
 
 
 class GeneratedTrajectory(BaseModel):
+    """Per-rollout summary stored in a generation report, without trajectory arrays."""
+
     model_config = ConfigDict(populate_by_name=True)
 
     trajectory_id: str
@@ -47,6 +54,8 @@ class GeneratedTrajectory(BaseModel):
 
 
 class GenerationReport(BaseModel):
+    """Generation settings and per-trajectory outcomes, with derived return statistics."""
+
     checkpoint: str
     episodes: int
     seed: int
@@ -56,14 +65,24 @@ class GenerationReport(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def return_statistics(self) -> ReturnStatistics | None:
+        """Compute aggregate return statistics from the generated trajectory records."""
         return ReturnStatistics.from_returns([row.episode_return for row in self.generated])
 
     @staticmethod
     def from_file(path: str | Path) -> GenerationReport:
-        """Load a JSON report, including reports written before statistics existed."""
+        """Load a JSON report, including reports written before statistics existed.
+
+        Args:
+            path: Generation-report JSON file.
+        """
         return GenerationReport.model_validate_json(Path(path).read_text(encoding="utf-8"))
 
     def to_file(self, path: str | Path) -> None:
+        """Write the report and computed return statistics as JSON.
+
+        Args:
+            path: Destination report file.
+        """
         Path(path).write_text(self.model_dump_json(indent=2, by_alias=True), encoding="utf-8")
 
 
@@ -71,10 +90,18 @@ class GenerationReport(BaseModel):
 
 
 class PipelineModel(BaseModel):
+    """Immutable pipeline contract rejecting unknown fields and nonfinite numbers."""
+
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
 
 class IDKConfig(PipelineModel):
+    """Feature construction and isolation-kernel settings.
+
+    window_length counts observations per temporal feature; psi is sampled
+    centers per partition and t is the number of partitions.
+    """
+
     representation: Literal[
         "state", "transition", "state_action", "state_action_next_state", "window"
     ] = "state"
@@ -87,6 +114,11 @@ class IDKConfig(PipelineModel):
     scaler: Literal["standard"] = "standard"
 
     def feature_width(self, observation_width: int) -> int:
+        """Return the number of columns in one unscaled feature vector.
+
+        Args:
+            observation_width: Number of components in one environment observation.
+        """
         if self.representation == "transition":
             return 2 * observation_width
         if self.representation == "state_action":
@@ -99,17 +131,22 @@ class IDKConfig(PipelineModel):
 
 
 class WindowConfig(PipelineModel):
+    """Choose whole trajectories or windows as units; length and stride count transitions."""
+
     mode: Literal["whole", "window"] = "whole"
     window_length: int = Field(default=25, ge=1)
     stride: int = Field(default=1, ge=1)
 
 
 class DatasetSelection(PipelineModel):
+    """Dataset location and ordered, unique trajectory IDs for a pipeline operation."""
+
     dataset: Path
     trajectory_ids: tuple[str, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
     def distinct_ids(self) -> Self:
+        """Reject empty or repeated trajectory IDs in the selection."""
         if any(not tid for tid in self.trajectory_ids) or len(set(self.trajectory_ids)) != len(
             self.trajectory_ids
         ):
@@ -118,11 +155,15 @@ class DatasetSelection(PipelineModel):
 
 
 class FitConfig(DatasetSelection):
+    """Selected training population, unit construction, and IDK fitting settings."""
+
     idk: IDKConfig = Field(default_factory=IDKConfig)
     unit: WindowConfig = Field(default_factory=WindowConfig)
 
 
 class EmbedConfig(DatasetSelection):
+    """Target trajectory selection and unit settings tied to a saved fit identity."""
+
     fit_artifact: Path
     fit_id: str = Field(pattern=r"^[0-9a-f]{64}$")
     fit: FitConfig
@@ -130,11 +171,14 @@ class EmbedConfig(DatasetSelection):
 
 
 class MetricConfig(PipelineModel):
+    """Pairwise comparison metric and optional KL smoothing strength."""
+
     metric: Literal["idk", "idk-distance", "cosine", "js", "kl"] = "idk"
     epsilon: float | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def kl_smoothing(self) -> Self:
+        """Require positive smoothing for KL and reject it for other metrics."""
         if self.metric == "kl" and self.epsilon is None:
             raise ValueError("--metric kl requires --epsilon > 0")
         if self.metric != "kl" and self.epsilon is not None:
@@ -143,6 +187,8 @@ class MetricConfig(PipelineModel):
 
 
 class NeighborConfig(PipelineModel):
+    """Neighbor count and exclusions for self, source trajectory, and window overlap."""
+
     k: int = Field(default=5, ge=1)
     include_self: bool = False
     exclude_same_trajectory: bool = False
@@ -150,6 +196,8 @@ class NeighborConfig(PipelineModel):
 
 
 class ClusterConfig(PipelineModel):
+    """Clustering settings and metadata fields used only for post-fit evaluation."""
+
     algorithm: Literal["hdbscan", "dbscan", "spectral", "dpgmm"] = "hdbscan"
     distance: Literal["idk-distance", "js"] = "idk-distance"
     eps: float = Field(default=0.1, gt=0)
@@ -166,12 +214,15 @@ class ClusterConfig(PipelineModel):
 
     @model_validator(mode="after")
     def algorithm_options(self) -> Self:
+        """Reject density-distance options for methods that do not consume distances."""
         if self.algorithm in {"spectral", "dpgmm"} and self.distance != "idk-distance":
             raise ValueError("distance only applies to density clustering")
         return self
 
 
 class PopulationConfig(PipelineModel):
+    """RBF-MMD bandwidth, estimator, and optional permutation-test settings."""
+
     bandwidth: float | None = Field(default=None, gt=0)
     estimator: Literal["biased", "unbiased"] = "biased"
     permutations: int = Field(default=0, ge=0)
@@ -179,6 +230,8 @@ class PopulationConfig(PipelineModel):
 
 
 class AnalysisConfig(PipelineModel):
+    """One analysis operation over saved embeddings, with explicit population roles."""
+
     command: Literal["pairwise", "neighbors", "rolling", "cluster", "population"]
     embeddings: Path
     output: Path
@@ -195,6 +248,7 @@ class AnalysisConfig(PipelineModel):
 
     @model_validator(mode="after")
     def population_roles(self) -> Self:
+        """Validate reference-group combinations and command-specific inputs."""
         if (self.nominal_reference is None) != (self.failure_reference is None):
             raise ValueError("Provide both nominal and failure reference artifacts")
         if self.reference is not None and self.nominal_reference is not None:
@@ -215,6 +269,8 @@ class AnalysisConfig(PipelineModel):
 
 
 class ArtifactMetadata(PipelineModel):
+    """Artifact format, dimensions, file hashes, and parent-fit provenance."""
+
     format_version: Literal[1] = 1
     kind: Literal["fit", "embedding"]
     artifact_id: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -229,6 +285,8 @@ class ArtifactMetadata(PipelineModel):
 
 
 class UnitRecord(PipelineModel):
+    """Serializable unit identity and half-open transition interval, without raw arrays."""
+
     unit_id: str
     trajectory_id: str
     start_step: int = Field(ge=0)
@@ -238,18 +296,23 @@ class UnitRecord(PipelineModel):
 
     @model_validator(mode="after")
     def interval(self) -> Self:
+        """Reject empty or reversed transition intervals."""
         if self.end_step <= self.start_step:
             raise ValueError("Unit end must follow its start")
         return self
 
 
 class AnalysisInput(PipelineModel):
+    """Path and content identities of an embedding artifact used by an analysis."""
+
     path: Path
     artifact_id: str
     fit_id: str
 
 
 class AnalysisMetadata(PipelineModel):
+    """Analysis input identities, software versions, and ordered units in each role."""
+
     format_version: Literal[1] = 1
     inputs: dict[str, AnalysisInput]
     software: dict[str, str]

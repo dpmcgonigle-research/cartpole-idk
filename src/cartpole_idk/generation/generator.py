@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def _trajectory_id() -> str:
+    """Create a timestamped, randomized identifier for a generated rollout."""
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     return f"traj_{stamp}_{secrets.token_hex(4)}"
 
@@ -31,6 +32,17 @@ def generate_dataset(
     perturbation: Perturbation | None = None,
     device: str = "cpu",
 ) -> TrajectoryStore:
+    """Run a greedy checkpoint policy and save trajectories plus a generation report.
+
+    Args:
+        checkpoint: Policy checkpoint to load.
+        output: Destination trajectory dataset directory.
+        episodes: Number of rollouts to record.
+        seed: Base episode seed, incremented for successive rollouts.
+        max_episode_steps: Maximum transitions per rollout.
+        perturbation: Action/observation transformation; None uses nominal behavior.
+        device: PyTorch device for policy inference.
+    """
     agent, payload = load_checkpoint(checkpoint, device=device)
     checkpoint_path = Path(checkpoint)
     store = TrajectoryStore(output)

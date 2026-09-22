@@ -7,6 +7,8 @@ from pathlib import Path
 
 @dataclass(slots=True)
 class TrainingConfig:
+    """DQN hyperparameters and training schedule; step counts refer to environment interactions."""
+
     total_steps: int = 200_000
     max_episode_steps: int = 500
     hidden_sizes: tuple[int, ...] = (128, 128)
@@ -26,4 +28,9 @@ class TrainingConfig:
     seed: int = 42
 
     def save(self, path: Path) -> None:
+        """Write training settings to an indented JSON file.
+
+        Args:
+            path: Destination configuration file.
+        """
         path.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")

@@ -10,7 +10,16 @@ from torch import nn
 
 
 class QNetwork(nn.Module):
+    """Feed-forward network mapping observations to one Q-value per discrete action."""
+
     def __init__(self, obs_dim: int, action_dim: int, hidden_sizes: tuple[int, ...]):
+        """Construct ReLU hidden layers and a linear action-value output.
+
+        Args:
+            obs_dim: Number of observation components.
+            action_dim: Number of discrete actions.
+            hidden_sizes: Width of each hidden layer, in order.
+        """
         super().__init__()
         layers: list[nn.Module] = []
         in_dim = obs_dim
@@ -21,11 +30,18 @@ class QNetwork(nn.Module):
         self.net = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Compute action values for observation tensors.
+
+        Args:
+            x: Observation tensor with obs_dim components on its last axis.
+        """
         return self.net(x)
 
 
 @dataclass(slots=True)
 class Transition:
+    """One replay-buffer interaction: state, action, reward, next state, and ending flag."""
+
     obs: np.ndarray
     action: int
     reward: float
@@ -34,21 +50,42 @@ class Transition:
 
 
 class ReplayBuffer:
+    """Bounded history of transitions with reproducible sampling without replacement."""
+
     def __init__(self, capacity: int, seed: int):
+        """Create an empty buffer that evicts the oldest transitions at capacity.
+
+        Args:
+            capacity: Maximum number of stored transitions.
+            seed: Seed for replay-sampling randomness.
+        """
         self._data: deque[Transition] = deque(maxlen=capacity)
         self._rng = random.Random(seed)
 
     def __len__(self) -> int:
+        """Number of currently stored transitions."""
         return len(self._data)
 
     def add(self, transition: Transition) -> None:
+        """Append one environment interaction to the replay history.
+
+        Args:
+            transition: Interaction record to retain.
+        """
         self._data.append(transition)
 
     def sample(self, n: int) -> list[Transition]:
+        """Draw a replay minibatch without replacement.
+
+        Args:
+            n: Number of transitions to draw; must not exceed the current buffer size.
+        """
         return self._rng.sample(list(self._data), n)
 
 
 class DQNAgent:
+    """Epsilon-greedy DQN policy with online and target networks and a replay update step."""
+
     def __init__(
         self,
         obs_dim: int,
@@ -59,6 +96,17 @@ class DQNAgent:
         seed: int,
         device: str = "cpu",
     ):
+        """Initialize matching online/target networks and the optimizer.
+
+        Args:
+            obs_dim: Number of observation components.
+            action_dim: Number of discrete actions.
+            hidden_sizes: Network hidden-layer widths.
+            learning_rate: Adam optimizer step size.
+            gamma: Discount factor for future rewards.
+            seed: Seed for network initialization and exploratory actions.
+            device: PyTorch device for network parameters and input tensors.
+        """
         torch.manual_seed(seed)
         self.obs_dim = obs_dim
         self.action_dim = action_dim
@@ -73,12 +121,23 @@ class DQNAgent:
 
     @torch.no_grad()
     def act(self, obs: np.ndarray, epsilon: float = 0.0) -> int:
+        """Choose an epsilon-greedy action; epsilon zero gives the greedy policy.
+
+        Args:
+            obs: Single environment observation.
+            epsilon: Probability of selecting a uniformly random action.
+        """
         if self.rng.random() < epsilon:
             return int(self.rng.integers(self.action_dim))
         x = torch.as_tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
         return int(self.online(x).argmax(dim=1).item())
 
     def update(self, batch: list[Transition]) -> float:
+        """Apply one target-network Bellman update and return the scalar Huber loss.
+
+        Args:
+            batch: Replay transitions providing observations, actions, rewards, and end flags.
+        """
         obs = torch.as_tensor(
             np.stack([t.obs for t in batch]), dtype=torch.float32, device=self.device
         )
@@ -105,4 +164,5 @@ class DQNAgent:
         return float(loss.item())
 
     def sync_target(self) -> None:
+        """Copy online-network weights into the target network."""
         self.target.load_state_dict(self.online.state_dict())

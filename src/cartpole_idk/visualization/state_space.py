@@ -4,6 +4,11 @@ from cartpole_idk.storage import Trajectory
 
 
 def plot_phase_space(trajectory: Trajectory):
+    """Plot cart and pole position/velocity traces; return the figure and axes.
+
+    Args:
+        trajectory: Recorded trajectory supplying true environment states.
+    """
     import matplotlib.pyplot as plt
 
     obs = trajectory.true_observations

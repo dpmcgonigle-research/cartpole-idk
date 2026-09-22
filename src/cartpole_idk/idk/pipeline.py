@@ -17,6 +17,12 @@ logger = logging.getLogger(__name__)
 
 
 def selected_units(selection: DatasetSelection, unit: WindowConfig) -> UnitCollection:
+    """Load selected trajectories and build whole/window units with source provenance.
+
+    Args:
+        selection: Dataset path and ordered trajectory IDs to load.
+        unit: Whole/window mode, transition length, and stride.
+    """
     store = TrajectoryStore(selection.dataset)
     if not store.manifest_path.is_file():
         raise ValueError(f"Missing dataset manifest: {store.manifest_path}")
@@ -35,7 +41,11 @@ def selected_units(selection: DatasetSelection, unit: WindowConfig) -> UnitColle
 
 
 def fit_dataset(config: FitConfig) -> FitArtifact:
-    """The only artifact operation that fits a scaler or IDK basis."""
+    """The only artifact operation that fits a scaler or IDK basis.
+
+    Args:
+        config: Training selection, unit construction, and IDK representation settings.
+    """
     units = selected_units(config, config.unit)
     valid, batch = represented_units(units, config.idk)
     observation_widths = {
@@ -59,7 +69,12 @@ def fit_dataset(config: FitConfig) -> FitArtifact:
 
 
 def embed_dataset(fit: FitArtifact, config: EmbedConfig) -> EmbeddingArtifact:
-    """Apply the saved representation, scaler and basis; never fit or resample."""
+    """Apply the saved representation, scaler and basis; never fit or resample.
+
+    Args:
+        fit: Previously saved fit artifact supplying the frozen scaler and basis.
+        config: Target dataset selection, unit settings, and matching fit identity.
+    """
     fit.validate()
     if config.fit_id != fit.fit_id or config.fit != fit.config:
         raise ValueError("Embedding configuration does not match the saved fit artifact")

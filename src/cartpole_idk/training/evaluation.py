@@ -9,6 +9,14 @@ from cartpole_idk.training.dqn import DQNAgent
 def evaluate_agent(
     agent: DQNAgent, *, episodes: int, max_episode_steps: int, seed: int
 ) -> dict[str, float]:
+    """Summarize greedy-policy returns and lengths without updating network weights.
+
+    Args:
+        agent: Policy to evaluate.
+        episodes: Number of evaluation rollouts.
+        max_episode_steps: Maximum transitions per rollout.
+        seed: Base environment seed, incremented for each episode.
+    """
     env = gym.make("CartPole-v1", max_episode_steps=max_episode_steps)
     returns, lengths = [], []
     for i in range(episodes):

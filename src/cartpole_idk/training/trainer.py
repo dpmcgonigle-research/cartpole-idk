@@ -18,11 +18,23 @@ logger = logging.getLogger(__name__)
 
 
 def _epsilon(step: int, cfg: TrainingConfig) -> float:
+    """Linearly anneal exploration to its configured final value.
+
+    Args:
+        step: Current training environment-step count.
+        cfg: Exploration endpoints and decay duration.
+    """
     fraction = min(1.0, step / max(1, cfg.epsilon_decay_steps))
     return cfg.epsilon_start + fraction * (cfg.epsilon_end - cfg.epsilon_start)
 
 
 def _append_csv(path: Path, row: dict) -> None:
+    """Append one metric record, writing a header when creating the file.
+
+    Args:
+        path: Destination CSV file.
+        row: Ordered metric names and values for one observation.
+    """
     exists = path.exists()
     with path.open("a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=list(row))
@@ -32,6 +44,13 @@ def _append_csv(path: Path, row: dict) -> None:
 
 
 def train(run_dir: str | Path, cfg: TrainingConfig, *, device: str = "cpu") -> Path:
+    """Train a CartPole DQN and return the directory holding metrics and checkpoints.
+
+    Args:
+        run_dir: Destination directory for the training run.
+        cfg: Training, evaluation, exploration, and checkpoint settings.
+        device: PyTorch device used for policy training and inference.
+    """
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     cfg.save(run_dir / "config.json")

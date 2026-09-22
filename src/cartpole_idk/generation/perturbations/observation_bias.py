@@ -17,6 +17,8 @@ FEATURE_INDEX = {
 
 @dataclass(slots=True)
 class ObservationBias(Perturbation):
+    """Add bias and optional Gaussian noise to one policy-observation feature after onset."""
+
     onset: NormalOnset
     feature: str = "pole_angle"
     bias: float = 0.04
@@ -27,6 +29,12 @@ class ObservationBias(Perturbation):
     _rng: np.random.Generator | None = field(default=None, init=False)
 
     def reset(self, rng: np.random.Generator, max_steps: int) -> dict:
+        """Validate sensor settings and sample onset for a new episode.
+
+        Args:
+            rng: Episode random generator for onset and stochastic effects.
+            max_steps: Episode horizon used to cap onset at max_steps - 1.
+        """
         if self.feature not in FEATURE_INDEX:
             raise ValueError(f"Unknown feature: {self.feature}")
         if self.noise_std < 0 or self.ramp_steps < 0:
@@ -44,6 +52,12 @@ class ObservationBias(Perturbation):
         }
 
     def agent_observation(self, true_obs: np.ndarray, step: int) -> np.ndarray:
+        """Apply the configured bias ramp and noise to a copy of the true observation.
+
+        Args:
+            true_obs: Unmodified environment state.
+            step: Zero-based episode timestep controlling onset and ramp progress.
+        """
         obs = np.asarray(true_obs, dtype=np.float32).copy()
         if step < self._onset_step:
             return obs

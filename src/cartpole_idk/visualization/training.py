@@ -6,6 +6,11 @@ import pandas as pd
 
 
 def plot_training(run_dir: str | Path):
+    """Plot training returns and greedy evaluation means; return the figure and axes.
+
+    Args:
+        run_dir: Training-run directory containing training and evaluation metric CSVs.
+    """
     import matplotlib.pyplot as plt
 
     run_dir = Path(run_dir)

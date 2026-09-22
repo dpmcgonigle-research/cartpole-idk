@@ -14,6 +14,12 @@ def represented_units(
     collection: UnitCollection,
     config: IDKExperimentConfig,
 ) -> tuple[UnitCollection, SequenceBatch]:
+    """Build feature sequences and retain units with nonempty representations.
+
+    Args:
+        collection: Units carrying raw segments and any earlier skip records.
+        config: Feature representation and observation/action source settings.
+    """
     if not collection.units:
         raise ValueError("No valid analysis units; check trajectory lengths and selections")
     trajectories = [u.trajectory for u in collection.units]

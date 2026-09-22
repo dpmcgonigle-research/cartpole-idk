@@ -7,6 +7,12 @@ class VariadicOptionsCommand(click.Command):
     """Translate ``--option a b`` into repeated Click option occurrences."""
 
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        """Expand space-separated values for repeated options before Click parses them.
+
+        Args:
+            ctx: Active Click command context.
+            args: Raw command-line argument tokens.
+        """
         list_options = {
             flag
             for param in self.params

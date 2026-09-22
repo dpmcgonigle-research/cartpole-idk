@@ -22,7 +22,11 @@ from cartpole_idk.model import (
 
 
 def common_options(function: Callable[..., Any]) -> Callable[..., Any]:
-    """Common artifact inputs and result destination; no fitting controls."""
+    """Common artifact inputs and result destination; no fitting controls.
+
+    Args:
+        function: Click callback receiving artifact paths and the dense-pair limit.
+    """
     for decorator in reversed(
         [
             click.argument("embeddings", type=click.Path(path_type=Path)),
@@ -40,6 +44,11 @@ def common_options(function: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def metric_options(function: Callable[..., Any]) -> Callable[..., Any]:
+    """Attach metric selection and KL smoothing options to a Click callback.
+
+    Args:
+        function: Analysis command callback to decorate.
+    """
     function = click.option("--epsilon", type=float, help="Required positive smoothing for KL")(
         function
     )
@@ -47,6 +56,11 @@ def metric_options(function: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def neighbor_options(function: Callable[..., Any]) -> Callable[..., Any]:
+    """Attach reference-population and neighbor-exclusion options to a callback.
+
+    Args:
+        function: Neighbor or rolling-analysis command callback to decorate.
+    """
     decorators = [
         click.option(
             "--reference",
@@ -70,7 +84,12 @@ def neighbor_options(function: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def run_analysis(command: str, options: dict[str, Any]) -> None:
-    """Convert Click parameters immediately to validated pipeline models."""
+    """Convert Click parameters immediately to validated pipeline models.
+
+    Args:
+        command: Analysis subcommand to execute.
+        options: Click arguments; consumed in place to build typed configurations.
+    """
     try:
         nested: dict[str, Any] = {}
         if command in {"pairwise", "neighbors", "rolling"}:

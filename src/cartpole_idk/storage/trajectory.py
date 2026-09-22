@@ -10,6 +10,12 @@ import numpy as np
 
 @dataclass(slots=True)
 class Trajectory:
+    """Recorded episode or prepared segment, with arrays and source metadata.
+
+    True and agent observations have T+1 rows; actions, rewards, and ending flags
+    have T rows. Commanded actions may differ from actions executed after perturbation.
+    """
+
     trajectory_id: str
     true_observations: np.ndarray
     agent_observations: np.ndarray
@@ -22,13 +28,20 @@ class Trajectory:
 
     @property
     def length(self) -> int:
+        """Number of recorded transitions."""
         return int(self.executed_actions.shape[0])
 
     @property
     def episode_return(self) -> float:
+        """Sum of this stored trajectory's rewards, including for prepared segments."""
         return float(self.rewards.sum())
 
     def save(self, path: Path) -> None:
+        """Write compressed arrays and JSON metadata without pickling.
+
+        Args:
+            path: Destination NPZ file; parent directories are created.
+        """
         path.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(
             path,
@@ -45,6 +58,11 @@ class Trajectory:
 
     @classmethod
     def load(cls, path: Path) -> Trajectory:
+        """Reconstruct trajectory arrays and metadata from an NPZ file.
+
+        Args:
+            path: Previously saved trajectory file.
+        """
         with np.load(path, allow_pickle=False) as z:
             return cls(
                 trajectory_id=str(z["trajectory_id"].item()),

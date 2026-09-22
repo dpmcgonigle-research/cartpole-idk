@@ -18,6 +18,12 @@ from cartpole_idk.storage.embeddings import EmbeddingSet
 
 @dataclass(slots=True)
 class ClusterResult:
+    """Unit assignments and labels, plus algorithm-specific distances or diagnostics.
+
+    Negative labels mark noise; probabilities are HDBSCAN membership strengths
+    or mixture responsibilities, depending on the selected method.
+    """
+
     assignments: pd.DataFrame
     labels: np.ndarray
     distances: np.ndarray | None = None
@@ -38,6 +44,13 @@ def cluster_units(
     JS clustering uses sqrt(mean partition JS), not divergence itself. DPGMM
     uses sparse TruncatedSVD followed by sklearn's DP-style Bayesian mixture.
     A supplied precomputed matrix must follow the selected algorithm's semantics.
+
+    Args:
+        embedded: Unit embeddings and metadata in matching row order.
+        config: Algorithm settings; omitted uses default HDBSCAN.
+        max_pairs: Maximum entries allowed in a computed dense pairwise matrix.
+        precomputed: Optional N-by-N distances for density methods or IDK affinity
+            for spectral clustering; JS distances must already be square-rooted.
     """
     config = config or ClusterConfig()
     n = len(embedded.units)
