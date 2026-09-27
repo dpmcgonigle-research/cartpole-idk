@@ -6,6 +6,7 @@ from cartpole_idk.generation.perturbations import (
     ObservationBias,
     Perturbation,
 )
+from cartpole_idk.initial_state import sample_initial_state
 
 __all__ = [
     "ActionDelay",
@@ -14,4 +15,5 @@ __all__ = [
     "ObservationBias",
     "Perturbation",
     "generate_dataset",
+    "sample_initial_state",
 ]

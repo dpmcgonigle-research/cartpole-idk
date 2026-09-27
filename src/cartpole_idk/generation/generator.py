@@ -4,12 +4,15 @@ import logging
 import secrets
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import gymnasium as gym
 import numpy as np
+from gymnasium.envs.classic_control.cartpole import CartPoleEnv
 
 from cartpole_idk.generation.perturbations import Perturbation
-from cartpole_idk.model import GeneratedTrajectory, GenerationReport
+from cartpole_idk.initial_state import sample_initial_state
+from cartpole_idk.model import GeneratedTrajectory, GenerationReport, InitialStateConfig
 from cartpole_idk.storage import Trajectory, TrajectoryStore
 from cartpole_idk.training import load_checkpoint
 
@@ -31,6 +34,7 @@ def generate_dataset(
     max_episode_steps: int = 500,
     perturbation: Perturbation | None = None,
     device: str = "cpu",
+    initial_state: InitialStateConfig | None = None,
 ) -> TrajectoryStore:
     """Run a greedy checkpoint policy and save trajectories plus a generation report.
 
@@ -42,7 +46,10 @@ def generate_dataset(
         max_episode_steps: Maximum transitions per rollout.
         perturbation: Action/observation transformation; None uses nominal behavior.
         device: PyTorch device for policy inference.
+        initial_state: Starting-state sampling config; None uses standard uniform bounds.
     """
+    initial_state = initial_state or InitialStateConfig()
+    initial_state_metadata = initial_state.model_dump(mode="json")
     agent, payload = load_checkpoint(checkpoint, device=device)
     checkpoint_path = Path(checkpoint)
     store = TrajectoryStore(output)
@@ -61,7 +68,11 @@ def generate_dataset(
 
     for episode in range(episodes):
         env = gym.make("CartPole-v1", max_episode_steps=max_episode_steps)
-        true_obs, _ = env.reset(seed=seed + episode)
+        env.reset(seed=seed + episode)
+        cartpole = cast(CartPoleEnv, env.unwrapped)
+        sampled_state = sample_initial_state(initial_state, cartpole.np_random)
+        cartpole.state = sampled_state.copy()
+        true_obs = np.asarray(sampled_state, dtype=np.float32)
         pmeta = perturbation.reset(rng, max_episode_steps)
         true_observations = [np.asarray(true_obs, dtype=np.float32)]
         agent_observations, commanded_actions, executed_actions = [], [], []
@@ -93,6 +104,8 @@ def generate_dataset(
             "episode_index": episode,
             "environment_seed": seed + episode,
             "generation_seed": seed,
+            "initial_state_config": initial_state_metadata,
+            "initial_state": sampled_state.tolist(),
             "perturbation_type": perturbation.name,
             "perturbation_onset": pmeta.get("onset"),
             "perturbation": pmeta,
@@ -134,6 +147,7 @@ def generate_dataset(
         seed=seed,
         perturbation_type=perturbation.name,
         generated=generated,
+        initial_state=initial_state,
     ).to_file(Path(output, "generation_report.json"))
     logger.info(
         "Generation complete: %d trajectories saved; report=%s",

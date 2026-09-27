@@ -2,11 +2,80 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from pathlib import Path
 from typing import Literal, Self
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+
+
+class PipelineModel(BaseModel):
+    """Immutable pipeline contract rejecting unknown fields and nonfinite numbers."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+
+
+class Distribution(Enum):
+    """Supported distributions for independently sampled CartPole starting states."""
+
+    UNIFORM = "uniform"
+    NORMAL = "normal"
+
+
+class UniformInitialState(PipelineModel):
+    """Independent uniform bounds in [x, x_dot, theta, theta_dot] order."""
+
+    x_min: float = -0.05
+    x_max: float = 0.05
+    x_dot_min: float = -0.05
+    x_dot_max: float = 0.05
+    theta_min: float = -0.05
+    theta_max: float = 0.05
+    theta_dot_min: float = -0.05
+    theta_dot_max: float = 0.05
+
+    @model_validator(mode="after")
+    def ordered_bounds(self) -> Self:
+        """Require a nonempty uniform interval for every state variable."""
+        for variable in ("x", "x_dot", "theta", "theta_dot"):
+            if getattr(self, f"{variable}_min") >= getattr(self, f"{variable}_max"):
+                raise ValueError(f"initial {variable}: min must be less than max")
+        return self
+
+
+class NormalInitialState(PipelineModel):
+    """Independent Gaussian parameters; zero standard deviation fixes a component."""
+
+    x_mean: float = 0.0
+    x_std: float = Field(default=0.05, ge=0)
+    x_dot_mean: float = 0.0
+    x_dot_std: float = Field(default=0.05, ge=0)
+    theta_mean: float = 0.0
+    theta_std: float = Field(default=0.05, ge=0)
+    theta_dot_mean: float = 0.0
+    theta_dot_std: float = Field(default=0.05, ge=0)
+
+
+class InitialStateConfig(PipelineModel):
+    """Starting-state distribution and only the parameters used by that distribution."""
+
+    distribution: Distribution = Distribution.UNIFORM
+    parameters: UniformInitialState | NormalInitialState = Field(
+        default_factory=UniformInitialState
+    )
+
+    @model_validator(mode="after")
+    def matching_parameters(self) -> Self:
+        """Reject parameter sets that do not match the selected distribution."""
+        expected = (
+            UniformInitialState if self.distribution is Distribution.UNIFORM else NormalInitialState
+        )
+        if not isinstance(self.parameters, expected):
+            raise ValueError(
+                f"initial {self.distribution.value} distribution has incompatible parameters"
+            )
+        return self
 
 
 class ReturnStatistics(BaseModel):
@@ -61,6 +130,7 @@ class GenerationReport(BaseModel):
     seed: int
     perturbation_type: str
     generated: list[GeneratedTrajectory]
+    initial_state: InitialStateConfig | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -87,12 +157,6 @@ class GenerationReport(BaseModel):
 
 
 # Pipeline contracts contain configuration and provenance, never numeric array payloads.
-
-
-class PipelineModel(BaseModel):
-    """Immutable pipeline contract rejecting unknown fields and nonfinite numbers."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
 
 class IDKConfig(PipelineModel):
@@ -229,10 +293,25 @@ class PopulationConfig(PipelineModel):
     random_state: int = Field(default=42, ge=0)
 
 
+class SupportConfig(PipelineModel):
+    """Optional metadata grouping for basis-support diagnostics."""
+
+    group_by: str | None = Field(default=None, min_length=1)
+
+
+class SupportSummary(PipelineModel):
+    """Artifact-wide descriptive statistics of per-unit support scores."""
+
+    n_units: int = Field(ge=0)
+    t: int = Field(ge=1)
+    psi: int = Field(ge=1)
+    statistics: dict[str, ReturnStatistics | None]
+
+
 class AnalysisConfig(PipelineModel):
     """One analysis operation over saved embeddings, with explicit population roles."""
 
-    command: Literal["pairwise", "neighbors", "rolling", "cluster", "population"]
+    command: Literal["pairwise", "neighbors", "rolling", "cluster", "population", "support"]
     embeddings: Path
     output: Path
     reference: Path | None = None
@@ -245,6 +324,7 @@ class AnalysisConfig(PipelineModel):
     neighbors: NeighborConfig = Field(default_factory=NeighborConfig)
     cluster: ClusterConfig = Field(default_factory=ClusterConfig)
     population: PopulationConfig = Field(default_factory=PopulationConfig)
+    support: SupportConfig = Field(default_factory=SupportConfig)
 
     @model_validator(mode="after")
     def population_roles(self) -> Self:

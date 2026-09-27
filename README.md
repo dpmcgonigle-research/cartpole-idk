@@ -80,6 +80,23 @@ cartpole-train   --run-dir runs/dqn_seed42   --total-steps 200000   --eval-every
 Training is measured in environment steps. Periodic evaluation runs are greedy
 (`epsilon=0`) and do not update the model.
 
+Training accepts the same [initial-state options](#initial-state-sampling) as
+generation. They apply to every training and evaluation episode, and are saved
+under `initial_state` in `config.json` and the checkpoint's training configuration:
+
+```bash
+cartpole-train --run-dir runs/dqn_uniform --total-steps 200000 \
+  --initial-distribution uniform \
+  --initial-x-min -2.2 --initial-x-max 2.2 \
+  --initial-theta-min -0.13962634 --initial-theta-max 0.13962634
+```
+
+Angles are radians (the example uses ±8 degrees); angular velocities are radians
+per second. Training seeds the environment once and continues its RNG across
+resets. Evaluation seeds each episode separately. Defaults remain uniform
+`[-0.05, 0.05]`; exact runs for historical seeds change because sampling follows
+Gymnasium's reset draw.
+
 [Back to Top](#cartpole-idk)
 
 ## Generate Trajectories
@@ -114,6 +131,55 @@ Generation writes `generation_report.json` with per-trajectory records and
 `null` when no episodes are generated. Load reports as typed objects with
 `GenerationReport.from_file(path)` from `cartpole_idk.model`; older reports
 without statistics are supported.
+
+### Initial-state sampling
+
+`cartpole-generate` samples each starting-state component independently in the
+order `[x, x_dot, theta, theta_dot]` (position, velocity, pole angle, angular
+velocity). Angles use radians. Uniform sampling is the default, with bounds
+`[-0.05, 0.05]` for every component:
+
+```bash
+cartpole-generate --checkpoint runs/dqn_seed42/checkpoints/step_000200000.pt \
+  --output datasets/generated/uniform-starts --episodes 100 \
+  --initial-distribution uniform \
+  --initial-x-min -1.0 --initial-x-max 1.0 \
+  --initial-x-dot-min -0.5 --initial-x-dot-max 0.5 \
+  --initial-theta-min -0.15 --initial-theta-max 0.15 \
+  --initial-theta-dot-min -0.75 --initial-theta-dot-max 0.75
+```
+
+Normal sampling uses independent, untruncated Gaussians. Each component defaults
+to mean `0.0` and standard deviation `0.05`; a standard deviation of zero fixes
+that component at its mean. Samples are not clipped to CartPole's termination bounds.
+
+```bash
+cartpole-generate --checkpoint runs/dqn_seed42/checkpoints/step_000200000.pt \
+  --output datasets/generated/normal-starts --episodes 100 \
+  --initial-distribution normal \
+  --initial-x-mean 0.0 --initial-x-std 0.5 \
+  --initial-x-dot-mean 0.0 --initial-x-dot-std 0.25 \
+  --initial-theta-mean 0.0 --initial-theta-std 0.05 \
+  --initial-theta-dot-mean 0.0 --initial-theta-dot-std 0.25
+```
+
+Only the selected distribution's parameters are used and validated: uniform bounds
+must satisfy `min < max`; normal standard deviations must be nonnegative. Parameters
+must be finite. Sampling uses `env.unwrapped.np_random` after reset with
+`seed + episode_index`, before any policy action or observation perturbation.
+The TimeLimit wrapper remains active. Defaults preserve the old initialization
+distribution, but exact rollouts for old seeds change because reset consumes its
+own random draw before the custom sample is drawn.
+
+`generation_report.json` records `initial_state`, containing the distribution and
+its active parameters (for example, `parameters.x_min` for uniform sampling).
+Each trajectory's existing metadata contains `initial_state_config` with the same
+settings and `initial_state` with the actual sampled four-component state. True
+observation arrays store its float32 representation. Prepared segments and later
+fit/embedding/analysis unit metadata retain these fields as source provenance;
+the recorded initial state still refers to the original rollout, even when a
+prepared segment starts later. Reports and datasets without these fields remain
+readable. No additional metadata files are introduced.
 
 ### Perturbations
 
@@ -420,6 +486,45 @@ cartpole-analyze rolling artifacts/embeddings/test --query-id TRAJECTORY_ID \
 ```
 
 Pairwise also accepts `--reference` for a rectangular query-versus-reference matrix.
+
+### Basis support
+
+`outside_mass` measures occupancy outside all learned isolation regions in each
+partition. It is a basis-support diagnostic, not a calibrated probability or a
+similarity metric. For each partition, it is `1 - sum(cell occupancies)`; the
+cells are never renormalized. Low outside mass means most of the trajectory/window
+is represented by learned regions; high outside mass means much of it falls
+outside the fitted basis support. There is no universal OOD cutoff: thresholds
+should later be calibrated using held-out nominal data.
+
+```bash
+cartpole-analyze support artifacts/embeddings/test --output analysis/support
+cartpole-analyze support artifacts/embeddings/test \
+  --output analysis/support-by-source --group-by source_dataset
+```
+
+The artifact supplies `t` and `psi`; neither the scaler nor the basis is refitted.
+Any existing scalar metadata column can be used for grouping, with missing values
+retained as a separate group. Output directories must be new or empty.
+
+- `support.parquet`: one row per unit in artifact order, retaining unit/source IDs,
+  local and available source window offsets, and existing metadata. Scores are
+  `outside_mass_mean`, `outside_mass_median`, `outside_mass_min`, `outside_mass_max`,
+  `outside_mass_std`, `partitions_with_any_outside`, and `support_rate_mean`.
+- `support_partitions.parquet`: `embedding_row`, `unit_id`, zero-based `partition`,
+  and `outside_mass`, ordered by unit then partition.
+- `support_summary.json`: `n_units`, `t`, `psi`, and `statistics` for each score
+  (mean, population std-dev, min, max, q1, median, q3 across units).
+- With `--group-by`, `support_group_summary.parquet`: one row per group and score,
+  containing `group_by`, `group_value`, `n_units`, `metric`, and the same statistics.
+- Standard `config.json`, `metadata.json`, and `units.parquet` preserve analysis provenance.
+
+Per-unit standard deviations also use the population definition. “Any outside”
+counts partitions with strictly positive missing mass. Only out-of-range floating
+point excursions up to `1e-10` are clipped; larger invalid occupancies are rejected.
+Summaries weight each unit equally, so overlapping windows are not independent
+trajectory observations. Per-partition values remain available for later calibration
+or temporal analysis; this command does not perform either.
 
 ### Clustering and population comparison
 

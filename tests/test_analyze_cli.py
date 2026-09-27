@@ -24,6 +24,7 @@ from cartpole_idk.storage import TrajectoryStore
         ("cluster", ["--algorithm", "spectral", "--n-clusters", "2"]),
         ("cluster", ["--algorithm", "dpgmm", "--svd-components", "2", "--n-components", "2"]),
         ("population", ["--permutations", "9"]),
+        ("support", []),
     ],
 )
 def test_analysis_uses_only_embedding_artifacts(
@@ -163,7 +164,7 @@ def test_rolling_requires_existing_windows(embedding_artifacts, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "command", [None, "pairwise", "neighbors", "rolling", "cluster", "population"]
+    "command", [None, "pairwise", "neighbors", "rolling", "cluster", "population", "support"]
 )
 @pytest.mark.parametrize("flag", ["-h", "--help"])
 def test_click_help(command, flag):

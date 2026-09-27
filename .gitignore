@@ -1,8 +1,9 @@
 # Codebase-specific
 runs/
 datasets/
-artifacts/
+/artifacts/
 analysis/
+output/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

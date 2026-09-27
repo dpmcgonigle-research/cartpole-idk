@@ -18,6 +18,7 @@ from cartpole_idk.model import (
     MetricConfig,
     NeighborConfig,
     PopulationConfig,
+    SupportConfig,
 )
 
 
@@ -109,6 +110,8 @@ def run_analysis(command: str, options: dict[str, Any]) -> None:
             nested["population"] = PopulationConfig.model_validate(
                 {key: options.pop(key) for key in PopulationConfig.model_fields if key in options}
             )
+        if command == "support":
+            nested["support"] = SupportConfig(group_by=options.pop("group_by", None))
         for key, value in options.items():
             if isinstance(value, Path):
                 options[key] = value.resolve()
@@ -125,7 +128,7 @@ def main() -> None:
     Notes:
 
         Choose a subcommand for pairwise comparisons, neighbor retrieval,
-        rolling scores, clustering, or population comparisons. Artifacts used
+        rolling scores, clustering, population comparisons, or basis support. Artifacts used
         together must share the same fitted model. See each subcommand's help
         for its arguments.
     """
@@ -306,6 +309,25 @@ def population(**options: Any) -> None:
         assume exchangeable units; overlapping windows may violate this.
     """
     run_analysis("population", options)
+
+
+@main.command()
+@click.argument("embeddings", type=click.Path(path_type=Path))
+@click.option("--output", type=click.Path(path_type=Path), required=True)
+@click.option("--group-by", help="Metadata column for per-group support summaries")
+def support(embeddings: Path, output: Path, group_by: str | None) -> None:
+    """Measure occupancy outside the saved isolation basis for every unit.
+
+    \b
+    Args:
+        embeddings: Existing embedding artifact directory.
+        output: New or empty destination directory for support reports.
+        group_by: Optional scalar metadata column used for grouped summaries.
+
+    The artifact supplies t and psi. Scores describe basis support, not
+    calibrated probabilities; no scaler or basis is fitted.
+    """
+    run_analysis("support", dict(embeddings=embeddings, output=output, group_by=group_by))
 
 
 if __name__ == "__main__":

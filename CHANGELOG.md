@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.3] - 2026-09-27
+
+### Added
+
+- support.py for cartpole-analyze, for out of basis type tests
+- Configurable uniform or normal initial states in `cartpole-generate`, with independent per-component parameters, seeded sampling, and provenance preserved through prepared and derived artifacts.
+- Added the same initial-state options to `cartpole-train`, applied to training and evaluation episodes and saved in run configurations and checkpoint metadata.
+
 ## [0.1.2] - 2026-09-20
 
 ### Changed

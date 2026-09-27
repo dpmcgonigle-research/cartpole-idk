@@ -14,6 +14,12 @@ from cartpole_idk.analytics.metrics import METRICS, pairwise
 from cartpole_idk.analytics.neighbors import reference_likeness, top_k_neighbors
 from cartpole_idk.analytics.population import population_mmd
 from cartpole_idk.analytics.reporting import software_versions, write_json, write_table
+from cartpole_idk.analytics.support import (
+    partition_outside_mass,
+    support_dataframe,
+    support_group_summary,
+    support_summary,
+)
 from cartpole_idk.artifacts import EmbeddingArtifact
 from cartpole_idk.artifacts.common import artifact_directory
 from cartpole_idk.model import AnalysisConfig, AnalysisInput, AnalysisMetadata
@@ -145,6 +151,30 @@ def execute_analysis(config: AnalysisConfig) -> None:
                 np.save(output / "cluster_probabilities.npy", result_cluster.probabilities)
             if result_cluster.components:
                 np.savez_compressed(output / "components.npz", **result_cluster.components)
+        elif config.command == "support":
+            outside = partition_outside_mass(analysis.values, t=analysis.t, psi=analysis.psi)
+            table = support_dataframe(analysis, outside)
+            write_table(output / "support.parquet", table)
+            write_json(
+                output / "support_summary.json",
+                support_summary(table, t=analysis.t, psi=analysis.psi),
+            )
+            write_table(
+                output / "support_partitions.parquet",
+                pd.DataFrame(
+                    {
+                        "embedding_row": np.repeat(np.arange(len(analysis.units)), analysis.t),
+                        "unit_id": np.repeat(table.unit_id.to_numpy(), analysis.t),
+                        "partition": np.tile(np.arange(analysis.t), len(analysis.units)),
+                        "outside_mass": outside.ravel(),
+                    }
+                ),
+            )
+            if config.support.group_by is not None:
+                write_table(
+                    output / "support_group_summary.parquet",
+                    support_group_summary(table, config.support.group_by),
+                )
         elif config.command == "population":
             assert group_b is not None
             mmd = population_mmd(

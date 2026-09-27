@@ -3,11 +3,18 @@ from __future__ import annotations
 import gymnasium as gym
 import numpy as np
 
+from cartpole_idk.initial_state import reset_cartpole
+from cartpole_idk.model import InitialStateConfig
 from cartpole_idk.training.dqn import DQNAgent
 
 
 def evaluate_agent(
-    agent: DQNAgent, *, episodes: int, max_episode_steps: int, seed: int
+    agent: DQNAgent,
+    *,
+    episodes: int,
+    max_episode_steps: int,
+    seed: int,
+    initial_state: InitialStateConfig | None = None,
 ) -> dict[str, float]:
     """Summarize greedy-policy returns and lengths without updating network weights.
 
@@ -16,11 +23,13 @@ def evaluate_agent(
         episodes: Number of evaluation rollouts.
         max_episode_steps: Maximum transitions per rollout.
         seed: Base environment seed, incremented for each episode.
+        initial_state: Starting-state settings; None uses standard uniform bounds.
     """
     env = gym.make("CartPole-v1", max_episode_steps=max_episode_steps)
+    initial_state = initial_state or InitialStateConfig()
     returns, lengths = [], []
     for i in range(episodes):
-        obs, _ = env.reset(seed=seed + i)
+        obs = reset_cartpole(env, initial_state, seed=seed + i)
         total, length = 0.0, 0
         while True:
             action = agent.act(obs, epsilon=0.0)

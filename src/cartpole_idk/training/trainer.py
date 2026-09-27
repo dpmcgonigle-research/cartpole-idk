@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import csv
 import logging
-from dataclasses import asdict
 from pathlib import Path
 
 import gymnasium as gym
 import numpy as np
 import torch
 
+from cartpole_idk.initial_state import reset_cartpole
 from cartpole_idk.training.checkpoint import save_checkpoint
 from cartpole_idk.training.config import TrainingConfig
 from cartpole_idk.training.dqn import DQNAgent, ReplayBuffer, Transition
@@ -48,7 +48,7 @@ def train(run_dir: str | Path, cfg: TrainingConfig, *, device: str = "cpu") -> P
 
     Args:
         run_dir: Destination directory for the training run.
-        cfg: Training, evaluation, exploration, and checkpoint settings.
+        cfg: Training, evaluation, initialization, exploration, and checkpoint settings.
         device: PyTorch device used for policy training and inference.
     """
     run_dir = Path(run_dir)
@@ -64,7 +64,7 @@ def train(run_dir: str | Path, cfg: TrainingConfig, *, device: str = "cpu") -> P
     np.random.seed(cfg.seed)
     torch.manual_seed(cfg.seed)
     env = gym.make("CartPole-v1", max_episode_steps=cfg.max_episode_steps)
-    obs, _ = env.reset(seed=cfg.seed)
+    obs = reset_cartpole(env, cfg.initial_state, seed=cfg.seed)
     agent = DQNAgent(4, 2, cfg.hidden_sizes, cfg.learning_rate, cfg.gamma, cfg.seed, device)
     replay = ReplayBuffer(cfg.replay_capacity, cfg.seed)
     episode_return = 0.0
@@ -113,7 +113,7 @@ def train(run_dir: str | Path, cfg: TrainingConfig, *, device: str = "cpu") -> P
                 },
             )
             episode_index += 1
-            obs, _ = env.reset()
+            obs = reset_cartpole(env, cfg.initial_state)
             episode_return, episode_length = 0.0, 0
 
         if step % cfg.eval_every == 0 or step == cfg.total_steps:
@@ -125,6 +125,7 @@ def train(run_dir: str | Path, cfg: TrainingConfig, *, device: str = "cpu") -> P
                 episodes=cfg.eval_episodes,
                 max_episode_steps=cfg.max_episode_steps,
                 seed=cfg.seed + 100_000 + step,
+                initial_state=cfg.initial_state,
             )
             _append_csv(run_dir / "evaluation_metrics.csv", {"step": step, **metrics})
             logger.info(
@@ -140,12 +141,13 @@ def train(run_dir: str | Path, cfg: TrainingConfig, *, device: str = "cpu") -> P
                 episodes=cfg.eval_episodes,
                 max_episode_steps=cfg.max_episode_steps,
                 seed=cfg.seed + 200_000 + step,
+                initial_state=cfg.initial_state,
             )
             save_checkpoint(
                 agent,
                 run_dir / "checkpoints" / f"step_{step:09d}.pt",
                 step=step,
-                metadata={"training_config": asdict(cfg), "evaluation": metrics},
+                metadata={"training_config": cfg.to_dict(), "evaluation": metrics},
             )
         if step % progress_every == 0 or step == cfg.total_steps:
             logger.info(

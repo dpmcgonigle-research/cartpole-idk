@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any
+
+from cartpole_idk.model import InitialStateConfig
 
 
 @dataclass(slots=True)
@@ -26,6 +29,13 @@ class TrainingConfig:
     eval_episodes: int = 20
     checkpoint_every: int = 10_000
     seed: int = 42
+    initial_state: InitialStateConfig = field(default_factory=InitialStateConfig)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return settings with JSON-compatible initial-state parameters."""
+        settings = asdict(self)
+        settings["initial_state"] = self.initial_state.model_dump(mode="json")
+        return settings
 
     def save(self, path: Path) -> None:
         """Write training settings to an indented JSON file.
@@ -33,4 +43,4 @@ class TrainingConfig:
         Args:
             path: Destination configuration file.
         """
-        path.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
+        path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")

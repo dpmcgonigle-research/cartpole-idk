@@ -18,6 +18,13 @@ from cartpole_idk.analytics.neighbors import (
     top_k_neighbors,
 )
 from cartpole_idk.analytics.population import MMDResult, population_mmd
+from cartpole_idk.analytics.support import (
+    partition_outside_mass,
+    summarize_support,
+    support_dataframe,
+    support_group_summary,
+    support_summary,
+)
 from cartpole_idk.storage.embeddings import EmbeddingSet
 from cartpole_idk.storage.units import AnalysisUnit
 
@@ -39,6 +46,11 @@ __all__ = [
     "pairwise_idk_similarity",
     "pairwise_js_divergence",
     "pairwise_kl_divergence",
+    "partition_outside_mass",
+    "summarize_support",
+    "support_dataframe",
+    "support_group_summary",
+    "support_summary",
     "population_mmd",
     "reference_likeness",
     "rolling_likeness",
