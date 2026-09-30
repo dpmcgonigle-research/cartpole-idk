@@ -1,6 +1,12 @@
+## 09/22/2026 - 10/06/2026 Plan
+- Created [cartpole-idk-experiments.docx](docs/cartpole-idk-experiments.docx)
+- Started on section 1 experiments
+    - ...
+- Started on section 2 experiments
+    - ...
 
 ## 09/22/2026 Advising Notes
-- TBD
+- Discussed moving forward with the plan notes in 09/22 - 09/29 section
 
 ## 09/22/2026 - 09/29/2026 Plan
 - Create a more meaningful separability test than the initial sanity check.  Likely something like:
