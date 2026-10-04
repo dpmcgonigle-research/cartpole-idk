@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -20,68 +19,6 @@ from cartpole_idk.model import (
     PopulationConfig,
     SupportConfig,
 )
-
-
-def common_options(function: Callable[..., Any]) -> Callable[..., Any]:
-    """Common artifact inputs and result destination; no fitting controls.
-
-    Args:
-        function: Click callback receiving artifact paths and the dense-pair limit.
-    """
-    for decorator in reversed(
-        [
-            click.argument("embeddings", type=click.Path(path_type=Path)),
-            click.option("--output", type=click.Path(path_type=Path), required=True),
-            click.option(
-                "--max-pairs",
-                type=int,
-                default=DEFAULT_MAX_PAIRS,
-                help="Maximum entries in any dense pairwise matrix",
-            ),
-        ]
-    ):
-        function = decorator(function)
-    return function
-
-
-def metric_options(function: Callable[..., Any]) -> Callable[..., Any]:
-    """Attach metric selection and KL smoothing options to a Click callback.
-
-    Args:
-        function: Analysis command callback to decorate.
-    """
-    function = click.option("--epsilon", type=float, help="Required positive smoothing for KL")(
-        function
-    )
-    return click.option("--metric", type=click.Choice(list(METRICS)), default="idk")(function)
-
-
-def neighbor_options(function: Callable[..., Any]) -> Callable[..., Any]:
-    """Attach reference-population and neighbor-exclusion options to a callback.
-
-    Args:
-        function: Neighbor or rolling-analysis command callback to decorate.
-    """
-    decorators = [
-        click.option(
-            "--reference",
-            type=click.Path(path_type=Path),
-            help="Reference embedding artifact; default input artifact",
-        ),
-        click.option("--nominal-reference", type=click.Path(path_type=Path)),
-        click.option("--failure-reference", type=click.Path(path_type=Path)),
-        click.option("--k", type=int, default=5),
-        click.option("--include-self", is_flag=True),
-        click.option("--exclude-same-trajectory", is_flag=True),
-        click.option(
-            "--max-overlap",
-            type=float,
-            help="Max intersection/shorter length for same-source reference windows",
-        ),
-    ]
-    for decorator in reversed(decorators):
-        function = decorator(function)
-    return function
 
 
 def run_analysis(command: str, options: dict[str, Any]) -> None:
@@ -136,8 +73,16 @@ def main() -> None:
 
 
 @main.command()
-@common_options
-@metric_options
+@click.argument("embeddings", type=click.Path(path_type=Path))
+@click.option("--output", type=click.Path(path_type=Path), required=True)
+@click.option(
+    "--max-pairs",
+    type=int,
+    default=DEFAULT_MAX_PAIRS,
+    help="Maximum entries in any dense pairwise matrix",
+)
+@click.option("--metric", type=click.Choice(list(METRICS)), default="idk")
+@click.option("--epsilon", type=float, help="Required positive smoothing for KL")
 @click.option("--reference", type=click.Path(path_type=Path))
 def pairwise(**options: Any) -> None:
     """Compute pairwise similarities or distances between analysis units.
@@ -162,9 +107,31 @@ def pairwise(**options: Any) -> None:
 
 
 @main.command()
-@common_options
-@metric_options
-@neighbor_options
+@click.argument("embeddings", type=click.Path(path_type=Path))
+@click.option("--output", type=click.Path(path_type=Path), required=True)
+@click.option(
+    "--max-pairs",
+    type=int,
+    default=DEFAULT_MAX_PAIRS,
+    help="Maximum entries in any dense pairwise matrix",
+)
+@click.option("--metric", type=click.Choice(list(METRICS)), default="idk")
+@click.option("--epsilon", type=float, help="Required positive smoothing for KL")
+@click.option(
+    "--reference",
+    type=click.Path(path_type=Path),
+    help="Reference embedding artifact; default input artifact",
+)
+@click.option("--nominal-reference", type=click.Path(path_type=Path))
+@click.option("--failure-reference", type=click.Path(path_type=Path))
+@click.option("--k", type=int, default=5)
+@click.option("--include-self", is_flag=True)
+@click.option("--exclude-same-trajectory", is_flag=True)
+@click.option(
+    "--max-overlap",
+    type=float,
+    help="Max intersection/shorter length for same-source reference windows",
+)
 def neighbors(**options: Any) -> None:
     """Retrieve reference neighbors and aggregate likeness scores.
 
@@ -195,10 +162,32 @@ def neighbors(**options: Any) -> None:
 
 
 @main.command()
-@common_options
+@click.argument("embeddings", type=click.Path(path_type=Path))
+@click.option("--output", type=click.Path(path_type=Path), required=True)
+@click.option(
+    "--max-pairs",
+    type=int,
+    default=DEFAULT_MAX_PAIRS,
+    help="Maximum entries in any dense pairwise matrix",
+)
 @click.option("--query-id", required=True)
-@metric_options
-@neighbor_options
+@click.option("--metric", type=click.Choice(list(METRICS)), default="idk")
+@click.option("--epsilon", type=float, help="Required positive smoothing for KL")
+@click.option(
+    "--reference",
+    type=click.Path(path_type=Path),
+    help="Reference embedding artifact; default input artifact",
+)
+@click.option("--nominal-reference", type=click.Path(path_type=Path))
+@click.option("--failure-reference", type=click.Path(path_type=Path))
+@click.option("--k", type=int, default=5)
+@click.option("--include-self", is_flag=True)
+@click.option("--exclude-same-trajectory", is_flag=True)
+@click.option(
+    "--max-overlap",
+    type=float,
+    help="Max intersection/shorter length for same-source reference windows",
+)
 def rolling(**options: Any) -> None:
     """Compute reference likeness through a query trajectory's windows.
 
@@ -229,7 +218,14 @@ def rolling(**options: Any) -> None:
 
 
 @main.command(cls=VariadicOptionsCommand)
-@common_options
+@click.argument("embeddings", type=click.Path(path_type=Path))
+@click.option("--output", type=click.Path(path_type=Path), required=True)
+@click.option(
+    "--max-pairs",
+    type=int,
+    default=DEFAULT_MAX_PAIRS,
+    help="Maximum entries in any dense pairwise matrix",
+)
 @click.option(
     "--algorithm", type=click.Choice(["hdbscan", "dbscan", "spectral", "dpgmm"]), default="hdbscan"
 )
@@ -279,7 +275,14 @@ def cluster(**options: Any) -> None:
 
 
 @main.command()
-@common_options
+@click.argument("embeddings", type=click.Path(path_type=Path))
+@click.option("--output", type=click.Path(path_type=Path), required=True)
+@click.option(
+    "--max-pairs",
+    type=int,
+    default=DEFAULT_MAX_PAIRS,
+    help="Maximum entries in any dense pairwise matrix",
+)
 @click.option("--group-b", type=click.Path(path_type=Path), required=True)
 @click.option("--metric", type=click.Choice(["rbf-mmd"]), default="rbf-mmd")
 @click.option("--bandwidth", type=float, help="RBF sigma; default pooled median distance")

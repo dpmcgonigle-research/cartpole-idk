@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.4] - 2026-10-04
+
+### Changed
+
+Flattened nested click option/argument decorators for entrypoints
+
 ## [0.1.3] - 2026-09-27
 
 ### Added
