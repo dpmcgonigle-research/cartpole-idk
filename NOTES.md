@@ -1,9 +1,13 @@
 ## 09/22/2026 - 10/06/2026 Plan
 - Created [cartpole-idk-experiments.docx](docs/cartpole-idk-experiments.docx)
-- Started on section 1 experiments
-    - ...
-- Started on section 2 experiments
-    - ...
+- Completed remaining section 1 experiments
+    - Verified that 2 populations of nominal trajectories are inseparable
+        - [nom-v-nom-4d-state.ipynb](notebooks/1-sanity-check/nom-v-nom-4d-state.ipynb)
+        - [nom-v-nom-8d-transitions.ipynb](notebooks/1-sanity-check/nom-v-nom-8d-transitions.ipynb)
+    - Scrambled the timesteps of one nominal population and verified that the 4-d state is inseparable, but the 8-d transition state is separable
+        - [nom-v-nom-scrambled.ipynb](notebooks/1-sanity-check/nom-v-nom-scrambled.ipynb)
+    - Added progressive noise to one of the dimensions to erify that the similarity monotonically decreases
+        - [progressive_noise_similarity.ipynb](notebooks/1-sanity-check/progressive_noise_similarity.ipynb)
 
 ## 09/22/2026 Advising Notes
 - Discussed moving forward with the plan notes in 09/22 - 09/29 section
