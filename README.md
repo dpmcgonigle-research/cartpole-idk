@@ -11,17 +11,18 @@ separate `pyidk` package and is consumed here as a dependency.
 - [Overview](#overview)
 - [Research Flow](#research-flow)
 - [Installation](#installation)
-- [Train](#train)
-- [Generate Trajectories](#generate-trajectories)
-- [Prepare Datasets](#prepare-datasets)
-- [Stored Trajectory Semantics](#stored-trajectory-semantics)
-- [Query](#query)
-- [Replay](#replay)
-- [IDK Representations](#idk-representations)
-- [Fit](#fit)
-- [Embed](#embed)
-- [Artifact Formats and Python APIs](#artifact-formats-and-python-apis)
-- [Analytics](#analytics)
+- [Usage](#usage)
+  - [Train](#train)
+  - [Generate Trajectories](#generate-trajectories)
+  - [Prepare Datasets](#prepare-datasets)
+  - [Stored Trajectory Semantics](#stored-trajectory-semantics)
+  - [Query](#query)
+  - [Replay](#replay)
+  - [IDK Representations](#idk-representations)
+  - [Fit](#fit)
+  - [Embed](#embed)
+  - [Artifact Formats and Python APIs](#artifact-formats-and-python-apis)
+  - [Analytics](#analytics)
 - [Tests](#tests)
 
 [Back to Top](#cartpole-idk)
@@ -29,15 +30,13 @@ separate `pyidk` package and is consumed here as a dependency.
 ## Research Flow
 
 ```text
-train policy
-    -> save checkpoints + evaluation metrics
-    -> generate nominal / perturbed trajectories
-    -> store + index + replay trajectories
-    -> cartpole-prepare: extract segments for fitting
-    -> cartpole-fit: save scaler + IDK basis artifact
-    -> cartpole-embed: save whole/window embeddings
-    -> cartpole-analyze: metrics, retrieval, clustering, populations
-    -> evaluate failure detection / lead time
+1. train policy, save checkpoints + evaluation metrics
+2. generate / perturb / store trajectories
+3. extract segments for fitting
+4. scale and fit segments, save scaler + IDK basis artifact
+5. embed trajectories
+6. generate and analyze analytics, metrics, clustering
+7. evaluate failure detection capabilities/potential
 ```
 
 [Back to Top](#cartpole-idk)
@@ -66,7 +65,9 @@ this project may restore the pinned GitHub version.
 
 [Back to Top](#cartpole-idk)
 
-## Train
+## Usage
+
+### Train
 
 CLI commands write timestamped progress messages to stderr. Training reports
 periodic step counts, evaluation results, and saved checkpoints; generation
@@ -99,7 +100,7 @@ Gymnasium's reset draw.
 
 [Back to Top](#cartpole-idk)
 
-## Generate Trajectories
+### Generate Trajectories
 
 Nominal:
 
@@ -132,7 +133,7 @@ Generation writes `generation_report.json` with per-trajectory records and
 `GenerationReport.from_file(path)` from `cartpole_idk.model`; older reports
 without statistics are supported.
 
-### Initial-state sampling
+#### Initial-state sampling
 
 `cartpole-generate` samples each starting-state component independently in the
 order `[x, x_dot, theta, theta_dot]` (position, velocity, pole angle, angular
@@ -181,7 +182,7 @@ the recorded initial state still refers to the original rollout, even when a
 prepared segment starts later. Reports and datasets without these fields remain
 readable. No additional metadata files are introduced.
 
-### Perturbations
+#### Perturbations
 
 Perturbations introduce controlled changes to actions or observations during an
 episode to study how familiarity and failure detection respond. Nominal generation
@@ -209,7 +210,7 @@ The sampled onset and perturbation parameters are saved in trajectory metadata.
 
 [Back to Top](#cartpole-idk)
 
-## Prepare Datasets
+### Prepare Datasets
 
 Prepare one contiguous segment per eligible generated trajectory for IDK fitting:
 
@@ -282,7 +283,7 @@ A Parquet manifest indexes trajectory metadata.
 
 [Back to Top](#cartpole-idk)
 
-## Query
+### Query
 
 ```bash
 cartpole-query datasets/generated/action_delay   --perturbation action_delay   --max-return 250
@@ -290,7 +291,7 @@ cartpole-query datasets/generated/action_delay   --perturbation action_delay   -
 
 [Back to Top](#cartpole-idk)
 
-## Replay
+### Replay
 
 ```bash
 cartpole-replay datasets/generated/action_delay --trajectory <trajectory-id>
@@ -300,7 +301,7 @@ Replay uses recorded true states rather than re-executing actions.
 
 [Back to Top](#cartpole-idk)
 
-## IDK Representations
+### IDK Representations
 
 The application adapter supports:
 
@@ -314,7 +315,7 @@ Normalization uses `pyidk.Standardizer`, fitted only on reference/training exper
 
 [Back to Top](#cartpole-idk)
 
-## Fit
+### Fit
 
 IDK work is split into three explicit, reusable stages:
 
@@ -355,7 +356,7 @@ per feature across all partitions and centers.
 
 [Back to Top](#cartpole-idk)
 
-## Embed
+### Embed
 
 ```bash
 cartpole-embed --fit artifacts/fit --dataset datasets/experiment \
@@ -389,7 +390,7 @@ Unit IDs include a source-dataset namespace to avoid collisions across artifacts
 
 [Back to Top](#cartpole-idk)
 
-## Artifact Formats and Python APIs
+### Artifact Formats and Python APIs
 
 ```text
 fit_artifact/                     embedding_artifact/
@@ -442,52 +443,55 @@ repeating the fitting/embedding stages themselves.
 
 [Back to Top](#cartpole-idk)
 
-## Analytics
+### Analytics
 
-### Metrics and neighbors
+#### Metrics
 
-| Metric | Meaning | Nearest |
-| --- | --- | --- |
-| `idk` | Native `pyidk` dot product divided by `t` | Highest |
-| `idk-distance` | `sqrt(max(0, Kxx + Kyy - 2Kxy))` | Lowest |
-| `cosine` | Dot product divided by embedding norms | Highest |
-| `js` | Mean partition JS divergence, including outside occupancy, in nats | Lowest |
-| `kl` | Smoothed directional `KL(query || reference)`, in nats | Lowest |
+The pairwise metrics compare **individual trajectories**, each represented by one
+IDK vector summarizing its state occupancy. For the state representation, write a
+recorded trajectory as $\tau = (x_0,\ldots,x_{N-1})$, where each $x_i$ is an observed
+state vector and $N$ is the number of state observations. In CartPole,
+$x_i = (x,\dot{x},\theta,\dot{\theta})$.
 
-Native similarity is not cosine, and self-similarity need not equal one. Cosine
-returns zero for comparisons involving a zero vector. JS retains an outside-region
-cell and exposes divergence, not its square root. KL requires `--epsilon > 0`;
-smoothing applies to all cells, including outside, before renormalization.
-These values are not probabilities or calibrated uncertainty.
+In distribution notation, $\mu_P = \mathbb{E}_{X \sim P}[\phi(X)]$, where $X$ is a
+random state drawn from $P$ and $\phi$ contains the isolation-region features.
+For a particular trajectory, $P_\tau$ is its empirical state distribution: drawing
+from $P_\tau$ means choosing one of its observed states uniformly. Its embedding is
+$\mu_\tau = \mu_{P_\tau} = \frac{1}{N}\sum_{i=0}^{N-1}\phi(x_i)$.
+Each coordinate is the fraction of observations assigned to a particular isolation
+region. All trajectories use the same fitted feature map, with $t$ partitions.
 
-Neighbors default to `k=5`, exclude self matches, and retain individual references
-alongside aggregate scores. `--exclude-same-trajectory` and `--max-overlap` restrict
-trivial rolling-window matches. Overlap is intersection divided by shorter length.
-No eligible neighbors yields count zero and a missing score. Without `--reference`,
-the input artifact itself is the reference library.
+Thus, comparing trajectories $\tau$ and $\eta$ compares **where their states occur
+and how frequently they occupy those regions**. For example, in one partition,
+occupancies $(0.8,0.2)$ and $(0.75,0.25)$ have a smaller IDK distance than
+$(0.8,0.2)$ and $(0.2,0.8)$. Averaging discards ordering: trajectories with the same
+state observations in different orders have identical state embeddings. A prepared
+segment or window is summarized in the same way; transition representations instead
+average features of transitions.
 
-Supply both `--nominal-reference` and `--failure-reference` embedding artifacts to
-retain separate likeness scores. Margin is nominal minus failure for similarities,
-and failure minus nominal for distances, so positive means more nominal-like.
-Rolling analysis selects existing windows by `--query-id`; it rejects whole-mode
-artifacts and never creates new windows.
+For JS and KL, $p_r$ and $q_r$ are the region-occupancy probabilities of trajectories
+$\tau$ and $\eta$ in partition $r$, including an outside-region category, and
+$m_r = (p_r + q_r)/2$.
+The index $j$ identifies a category within partition $r$: $j=1,\ldots,\psi$
+enumerates its $\psi$ isolation regions, and $j=\psi+1$ denotes the outside-region
+category. Thus, $p_{rj}$ is the fraction of trajectory $\tau$'s observations in
+category $j$ of partition $r$, and $q_{rj}$ is the corresponding fraction for
+trajectory $\eta$. KL sums over all $\psi+1$ categories, then averages over the
+$t$ partitions.
 
-```bash
-cartpole-analyze pairwise artifacts/embeddings/test \
-  --metric idk-distance --output analysis/pairwise
+For population comparisons, $U,U' \sim \mathcal{P}$ and $V,V' \sim \mathcal{Q}$
+are independent draws of IDK embedding vectors; the Gaussian kernel is
+$k_\sigma(u,v) = \exp(-\lVert u-v\rVert^2/(2\sigma^2))$, with $\sigma > 0$.
 
-cartpole-analyze neighbors artifacts/embeddings/test \
-  --reference artifacts/embeddings/reference --metric cosine --k 5 \
-  --exclude-same-trajectory --output analysis/neighbors
+| Measure | Formula | Interpretation | Drawback |
+| --- | --- | --- | --- |
+| IDK similarity (`idk`) | $K(\tau,\eta) = \langle\mu_\tau,\mu_\eta\rangle/t$ | Overlap in two trajectories' state occupancy; a positive-semidefinite kernel on their empirical distributions. | Depends on occupancy concentration as well as overlap; self-similarity need not be one. |
+| IDK-induced distance (`idk-distance`) | $d(\tau,\eta) = \lVert\mu_\tau-\mu_\eta\rVert/\sqrt{t}$ | Difference between two trajectories' occupancy fractions; the MMD for the underlying isolation kernel scaled by $1/t$. | Distinct trajectories or state distributions can share an embedding, so zero distance does not establish that trajectories are identical. |
+| Cosine similarity (`cosine`) | $\langle\mu_\tau,\mu_\eta\rangle/(\lVert\mu_\tau\rVert\lVert\mu_\eta\rVert)$ | Angular agreement between trajectory occupancy vectors, invariant to positive rescaling. | Discards magnitude and cannot distinguish proportional embeddings; undefined for zero vectors without a convention. |
+| Jensen–Shannon divergence (`js`) | $\frac{1}{2t}\sum_{r=1}^{t}[D_{\mathrm{KL}}(p_r\parallel m_r)+D_{\mathrm{KL}}(q_r\parallel m_r)]$ | Average information that region membership provides about which of the two equally likely trajectories supplied a state. | Captures only distinctions retained by the partitions; within-region differences remain invisible. |
+| Kullback–Leibler divergence (`kl`) | $\frac{1}{t}\sum_{r=1}^{t}\sum_{j=1}^{\psi+1} p_{rj}\log(p_{rj}/q_{rj})$ | Average excess logarithmic loss from describing trajectory $\tau$'s region occupancy with trajectory $\eta$'s probabilities. | Asymmetric and potentially infinite at zero reference probabilities; smoothing changes the compared distributions. |
 
-cartpole-analyze rolling artifacts/embeddings/test --query-id TRAJECTORY_ID \
-  --nominal-reference artifacts/embeddings/nominal \
-  --failure-reference artifacts/embeddings/failure --output analysis/rolling
-```
-
-Pairwise also accepts `--reference` for a rectangular query-versus-reference matrix.
-
-### Basis support
+#### Basis support
 
 `outside_mass` measures occupancy outside all learned isolation regions in each
 partition. It is a basis-support diagnostic, not a calibrated probability or a
@@ -526,7 +530,7 @@ Summaries weight each unit equally, so overlapping windows are not independent
 trajectory observations. Per-partition values remain available for later calibration
 or temporal analysis; this command does not perform either.
 
-### Clustering and population comparison
+#### Clustering and population comparison
 
 Clustering supports sklearn HDBSCAN (default), DBSCAN, spectral clustering on native
 IDK affinity, and sparse SVD followed by a DP-style Bayesian Gaussian mixture.
@@ -567,22 +571,15 @@ explicitly raise the analysis limit. Embedding storage remains sparse.
 Optional plotting helpers remain in `cartpole_idk.visualization.analytics` and
 require matplotlib. Plots do not replace quantitative cluster diagnostics.
 
-### Migration
-
-`cartpole-idk-evaluate` has been removed. Its top-k scoring behavior is provided by
-`cartpole-analyze neighbors` after explicit fitting and embedding. The old
-`cartpole-analyze DATASET --fit-ids-file ...` interface is intentionally removed.
-Move fit settings to `cartpole-fit`, unit settings to `cartpole-embed`, and supply
-embedding artifact directories to analysis. Prior analysis-output directories
-lack the new artifact contracts; regenerate them with `cartpole-embed`.
-
-Existing low-level `fit_reference()` remains an explicit in-memory fitting helper
-in `idk`; no analytics entrypoint calls it. Raw-unit construction moved from
-`analytics.units` to `idk.units`; fit/embed orchestration lives in `idk.pipeline`.
-
 [Back to Top](#cartpole-idk)
 
 ## Tests
+
+```bash
+make test
+```
+
+or
 
 ```bash
 pytest
