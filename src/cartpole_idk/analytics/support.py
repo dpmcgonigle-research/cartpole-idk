@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from pyidk import outside_mass
 from scipy.sparse import csr_matrix
 
 from cartpole_idk.model import ReturnStatistics, SupportSummary
@@ -37,18 +38,7 @@ def partition_outside_mass(embeddings: csr_matrix, *, t: int, psi: int) -> np.nd
     values = csr_matrix(embeddings, dtype=float, copy=True)
     if values.shape[1] != t * psi:
         raise ValueError(f"Embedding width {values.shape[1]} != t * psi ({t * psi})")
-    values.sum_duplicates()
-    if not np.isfinite(values.data).all():
-        raise ValueError("Embedding occupancies must be finite")
-    if np.any(values.data < -ROUNDING_TOLERANCE) or np.any(values.data > 1 + ROUNDING_TOLERANCE):
-        raise ValueError("Embedding cell occupancy must be in [0, 1]")
-    np.clip(values.data, 0, 1, out=values.data)
-    columns = np.arange(t * psi)
-    grouping = csr_matrix((np.ones(len(columns)), (columns, columns // psi)), shape=(t * psi, t))
-    assigned = (values @ grouping).toarray()
-    if np.any(assigned > 1 + ROUNDING_TOLERANCE):
-        raise ValueError("Assigned partition mass exceeds one; expected mean occupancies")
-    return 1 - np.clip(assigned, 0, 1)
+    return outside_mass(values, n_partitions=t, atol=ROUNDING_TOLERANCE).per_partition
 
 
 def summarize_support(outside_mass: np.ndarray) -> pd.DataFrame:

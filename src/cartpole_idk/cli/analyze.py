@@ -8,16 +8,23 @@ from typing import Any
 import click
 
 from cartpole_idk.analytics.metrics import DEFAULT_MAX_PAIRS, METRICS
+from cartpole_idk.analytics.windows import WindowAnalytics
 from cartpole_idk.analytics.workflow import execute_analysis
+from cartpole_idk.artifacts import FitArtifact
+from cartpole_idk.artifacts.common import artifact_directory
+from cartpole_idk.artifacts.io import write_json
 from cartpole_idk.cli.options import VariadicOptionsCommand
+from cartpole_idk.cli.selection import selection
 from cartpole_idk.logging import configure_logging
 from cartpole_idk.model import (
     AnalysisConfig,
     ClusterConfig,
+    DatasetSelection,
     MetricConfig,
     NeighborConfig,
     PopulationConfig,
     SupportConfig,
+    WindowScoringConfig,
 )
 
 
@@ -60,13 +67,14 @@ def run_analysis(command: str, options: dict[str, Any]) -> None:
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 def main() -> None:
-    """Analyze saved embeddings without fitting or transforming trajectories.
+    """Analyze saved embeddings or score moving windows with a saved fit.
 
     Notes:
 
         Choose a subcommand for pairwise comparisons, neighbor retrieval,
-        rolling scores, clustering, population comparisons, or basis support. Artifacts used
-        together must share the same fitted model. See each subcommand's help
+        rolling scores, raw-data windows, clustering, population comparisons,
+        or basis support. Artifacts used together must share the same fitted model.
+        See each subcommand's help
         for its arguments.
     """
     configure_logging()
@@ -331,6 +339,115 @@ def support(embeddings: Path, output: Path, group_by: str | None) -> None:
     calibrated probabilities; no scaler or basis is fitted.
     """
     run_analysis("support", dict(embeddings=embeddings, output=output, group_by=group_by))
+
+
+@main.command()
+@click.option("--fit", "fit_path", required=True, type=click.Path(path_type=Path))
+@click.option("--dataset", required=True, type=click.Path(path_type=Path))
+@click.option("--ids-file", type=click.Path(path_type=Path), help="Query IDs; default all")
+@click.option(
+    "--reference",
+    multiple=True,
+    type=(str, click.Path(path_type=Path)),
+    help="Reference NAME DATASET; repeat for multiple populations",
+)
+@click.option(
+    "--reference-ids",
+    multiple=True,
+    type=(str, click.Path(path_type=Path)),
+    help="Reference NAME IDS_FILE; default all trajectories in each reference dataset",
+)
+@click.option(
+    "--window-length",
+    "lengths",
+    multiple=True,
+    type=int,
+    default=(25,),
+    help="Raw transitions per window; repeat to sweep sizes using the same cache",
+)
+@click.option("--query-stride", type=int, default=1)
+@click.option("--reference-stride", type=int, default=1)
+@click.option(
+    "--reference-windows-per-trajectory",
+    type=int,
+    help="Sample at most this many windows per stored reference trajectory",
+)
+@click.option("--random-state", type=int, default=42)
+@click.option(
+    "--metric",
+    "metrics",
+    multiple=True,
+    type=click.Choice([*METRICS, "outside-mass"]),
+    default=("idk", "idk-distance", "outside-mass"),
+)
+@click.option("--aggregation", type=click.Choice(["mean", "top_k"]), default="mean")
+@click.option("--k", type=int, help="Required for top_k; omit for mean")
+@click.option("--epsilon", type=float, help="Required when KL is included")
+@click.option("--include-self", is_flag=True)
+@click.option("--exclude-same-trajectory", is_flag=True)
+@click.option("--max-overlap", type=float)
+@click.option("--query-batch-size", type=int, default=128)
+@click.option("--reference-block-size", type=int, default=1024)
+@click.option("--output", required=True, type=click.Path(path_type=Path))
+def windows(
+    fit_path: Path,
+    dataset: Path,
+    ids_file: Path | None,
+    reference: tuple[tuple[str, Path], ...],
+    reference_ids: tuple[tuple[str, Path], ...],
+    lengths: tuple[int, ...],
+    include_self: bool,
+    output: Path,
+    **options: Any,
+) -> None:
+    """Score current k-transition windows against references from anywhere in each trajectory.
+
+    Transform raw trajectories once using the saved fit. Window-size sweeps reuse
+    point features. Save scores, reference selections, skipped trajectories and
+    endpoint mean/median/IQR tables under window_LENGTH; plotting stays in notebooks.
+    Reference windows have the same length as query windows, without time alignment.
+    """
+    try:
+        references = dict(reference)
+        id_files = dict(reference_ids)
+        if len(references) != len(reference) or len(id_files) != len(reference_ids):
+            raise ValueError("Reference and reference-ids names must be distinct")
+        if id_files.keys() - references.keys():
+            raise ValueError("Every reference-ids name must have a matching reference")
+        if len(set(lengths)) != len(lengths):
+            raise ValueError("Window lengths must be distinct")
+        configs = [
+            WindowScoringConfig.model_validate(
+                {**options, "window_length": length, "exclude_same_unit": not include_self}
+            )
+            for length in lengths
+        ]
+        fit = FitArtifact.load(fit_path)
+        session = WindowAnalytics(
+            fit,
+            DatasetSelection(
+                dataset=dataset.resolve(), trajectory_ids=selection(dataset, ids_file)
+            ),
+            {
+                name: DatasetSelection(
+                    dataset=path.resolve(), trajectory_ids=selection(path, id_files.get(name))
+                )
+                for name, path in references.items()
+            },
+        )
+        with artifact_directory(output) as destination:
+            for config in configs:
+                session.score(config).save(destination / f"window_{config.window_length}")
+            write_json(
+                destination / "sweep.json",
+                {
+                    "fit_artifact": fit_path.resolve(),
+                    "fit_id": fit.fit_id,
+                    "windows": [config.window_length for config in configs],
+                },
+            )
+    except (ValueError, KeyError, OSError) as exc:
+        raise click.UsageError(str(exc)) from exc
 
 
 if __name__ == "__main__":

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0] - 2026-10-08
+
+### Added
+
+- `WindowAnalytics`, `WindowScoringConfig`, and `cartpole-analyze windows` for current k-transition window scoring using a saved fit and raw trajectories. Sparse point features are cached and reused across window-size, stride, and metric sweeps, without requiring saved window embedding artifacts.
+- Windowed IDK similarity, IDK distance, outside mass, cosine similarity, JS divergence, and explicitly smoothed KL divergence. Reference windows can occur anywhere in each reference trajectory, with independent strides, seeded sampling per trajectory, mean or top-k reduction, and source-aware self/trajectory/overlap exclusions.
+- Per-window score tables, endpoint mean/median/IQR summaries across query trajectories, eligible/selected reference counts, exact reference-window selections, skipped-trajectory reports, and saved configuration/provenance. Plotting remains in notebooks, with usage examples in the README.
+- `transition_action`, a 9D `[state, next_state, action]` representation using a scalar action, alongside the existing 10D one-hot `state_action_next_state` representation.
+
+### Changed
+
+- Pinned pyidk to the 0.2.1 implementation and delegated metric arithmetic, outside mass, window occupancy aggregation, and reference reduction to its APIs.
+- Existing neighbor and trajectory-familiarity scoring now use blocked pyidk reference reduction. For `neighbors` and `rolling`, `--max-pairs` limits a working pairwise block instead of the total query-by-reference population.
+
 ## [0.1.4] - 2026-10-04
 
 ### Changed

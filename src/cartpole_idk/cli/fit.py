@@ -24,7 +24,16 @@ from cartpole_idk.model import FitConfig, IDKConfig, WindowConfig
 @click.option("--output", required=True, type=click.Path(path_type=Path))
 @click.option(
     "--representation",
-    type=click.Choice(["state", "transition", "state_action", "state_action_next_state", "window"]),
+    type=click.Choice(
+        [
+            "state",
+            "transition",
+            "transition_action",
+            "state_action",
+            "state_action_next_state",
+            "window",
+        ]
+    ),
     default="state",
 )
 @click.option("--observation-source", type=click.Choice(["true", "agent"]), default="true")

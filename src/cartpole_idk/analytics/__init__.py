@@ -25,6 +25,12 @@ from cartpole_idk.analytics.support import (
     support_group_summary,
     support_summary,
 )
+from cartpole_idk.analytics.windows import (
+    WindowAnalytics,
+    WindowAnalyticsResult,
+    summarize_window_scores,
+)
+from cartpole_idk.model import WindowScoringConfig
 from cartpole_idk.storage.embeddings import EmbeddingSet
 from cartpole_idk.storage.units import AnalysisUnit
 
@@ -36,6 +42,10 @@ __all__ = [
     "METRICS",
     "MMDResult",
     "NeighborResult",
+    "WindowAnalytics",
+    "WindowAnalyticsResult",
+    "WindowScoringConfig",
+    "summarize_window_scores",
     "cluster_purity",
     "cluster_summary",
     "cluster_units",

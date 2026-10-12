@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cartpole-idk"
-version = "0.1.4"
+version = "0.2.0"
 description = "CartPole research harness for Isolation Distributional Kernel experiments."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,7 +16,7 @@ dependencies = [
   "pandas>=2.3",
   "pyarrow>=25",
   "pydantic>=2",
-  "pyidk @ git+https://github.com/dpmcgonigle-research/pyidk.git@48d9585bfd5190b6409bdc98d6383221c3e787c7",
+  "pyidk @ git+https://github.com/dpmcgonigle-research/pyidk.git@739c4a052d232b21f62fb396fd9492d6eb14ff67",
   "scipy>=1.17",
   "scikit-learn>=1.6",
   "torch>=2.14",

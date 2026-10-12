@@ -305,11 +305,12 @@ Replay uses recorded true states rather than re-executing actions.
 
 The application adapter supports:
 
-- state
-- transition
-- state-action
-- state-action-next-state
-- temporal window
+- `state`: 4D observations
+- `transition`: 8D `[state, next_state]`
+- `transition_action`: 9D `[state, next_state, action]`, with scalar action 0/1
+- `state_action`: 6D `[state, one_hot_action]`
+- `state_action_next_state`: 10D `[state, one_hot_action, next_state]`
+- `window`: flattened temporal observation features
 
 Normalization uses `pyidk.Standardizer`, fitted only on reference/training experience.
 
@@ -329,8 +330,9 @@ embedding artifacts -> cartpole-analyze -> analysis results
 isolation basis. **Embedded populations** are transformed with that saved model.
 **Analysis/reference populations** are selected embedding artifacts used for
 comparison. Choose nominal-only, joint nominal/failure, or another explicit fit
-population. Neither embedding nor analytics fits a scaler or IDK basis. Analytics
-also never loads raw trajectories or generates embeddings.
+population. Neither embedding nor analytics fits a scaler or IDK basis. The
+`windows` analysis command reads raw trajectories and caches point features from
+the saved fit; other analysis commands use existing embedding artifacts.
 
 ```bash
 cartpole-fit datasets/experiment \
@@ -444,6 +446,123 @@ repeating the fitting/embedding stages themselves.
 [Back to Top](#cartpole-idk)
 
 ### Analytics
+
+#### Moving-window metrics
+
+This integration requires **pyidk 0.2.1**, pinned in `pyproject.toml`. Metric
+arithmetic, outside mass, window occupancy aggregation, and blocked reference
+reduction are delegated to pyidk. CartPole supplies representations, trajectory
+provenance, reference sampling/exclusions, and report tables.
+
+Use `WindowAnalytics` with a saved fit and raw datasets. Each session applies the
+saved representation, scaler, and point kernel once per distinct dataset/ID
+selection, then reuses those sparse point features across window-size, stride,
+and metric sweeps. Identical query/reference selections share a cache. You do
+not need `cartpole-embed --mode window` for these scores. Whole-trajectory mean
+embeddings alone cannot reconstruct window scores. Changing psi, t, the scaler,
+or representation requires a new fit and session.
+
+```python
+from pathlib import Path
+from cartpole_idk.artifacts import FitArtifact
+from cartpole_idk.analytics import WindowAnalytics, WindowScoringConfig
+from cartpole_idk.cli.selection import selection
+from cartpole_idk.model import DatasetSelection
+
+query_path = Path("datasets/generated/action_flip")
+reference_path = Path("datasets/generated/nominal")
+session = WindowAnalytics(
+    FitArtifact.load("artifacts/fit"),
+    DatasetSelection(dataset=query_path, trajectory_ids=selection(query_path, None)),
+    {"reference": DatasetSelection(
+        dataset=reference_path, trajectory_ids=selection(reference_path, None)
+    )},
+)
+results = {}
+for length in (10, 25, 50):
+    results[length] = session.score(WindowScoringConfig(
+        window_length=length,
+        reference_stride=5,
+        reference_windows_per_trajectory=20,
+        random_state=42,
+        metrics=("idk", "idk-distance", "outside-mass", "cosine", "js"),
+        aggregation="mean",
+    ))
+
+scores = results[25].scores       # one row per query window / metric / reference group
+summary = results[25].summary     # mean, median, q25, q75, n_windows, n_scored
+results[25].save("analysis/window_25")
+# In a notebook, group summary by metric/reference_group/source_dataset,
+# plot mean or median against end_step, and shade between q25 and q75.
+```
+
+For every query interval `[start_step, end_step)`, `window_length` counts raw
+**transitions**. The score becomes available at observation `end_step`. A
+k-transition state window contains k+1 states; transition and action-based
+representations contain k rows. Temporal representation length L contributes
+k+2−L rows and requires k+2−L > 0. Only complete windows are emitted, with no
+padding or crossing trajectory boundaries. `source_start_step` and
+`source_end_step` retain original coordinates for prepared segments. Short
+trajectories are recorded in `skipped`.
+
+Reference windows have the **same transition length** as the query window, but
+can start anywhere in each reference trajectory. No query/reference timestep
+alignment is imposed. `reference_stride` defines candidate starts; an optional
+`reference_windows_per_trajectory` cap samples without replacement using the
+seed, then restores start order. The selected windows are available in
+`reference_windows`, so a saved run records the exact reference bank.
+
+- `aggregation="mean"` equally weights **all eligible reference windows**.
+- `aggregation="top_k", k=5` averages the five best eligible windows in the
+  entire reference bank (or fewer if available). IDK/cosine select the largest
+  values; distance/JS/KL select the smallest. Ties use reference-bank order.
+- Windows are equally weighted, so long trajectories contribute more when no
+  cap is set. A cap limits this effect; short trajectories can still contribute
+  fewer windows. The cap applies to each stored trajectory, including prepared
+  segments; it does not enforce equal weighting of original sources.
+- Exact same-source intervals are excluded by default. Use
+  `exclude_same_trajectory=True` to exclude every reference from the original
+  query trajectory, or `max_overlap=0` to exclude overlapping transition
+  intervals from that source. Adjacent state windows can still share a boundary
+  observation. These policies use source dataset/trajectory provenance and
+  apply before reference reduction.
+- No eligible references yields NaN and counts of zero. `outside-mass` needs
+  no reference: it averages the query's missing occupancy across partitions,
+  appears once with `reference_group="__basis__"`, and remains available even
+  when no reference match is eligible. An all-zero embedding has outside mass
+  one and can have distance zero to another all-zero embedding.
+- Add `"kl"` to `metrics` with an explicit positive `epsilon` to calculate
+  directional KL(query || reference), including the outside category.
+
+The default summary groups by `source_dataset`, metric, reference group,
+analysis identity, and local `end_step`. Its IQR is across the **per-query
+scores**, after reference reduction; it is neither a spread over reference
+matches nor a confidence interval. `n_scored` records the number of nonmissing
+scores, which may decline as trajectories end. Overlapping windows are dependent.
+For different metadata groups or original-source coordinates, call
+`summarize_window_scores(scores, group_by=("perturbation_type",),
+endpoint="source_end_step")`. Each stored query window receives equal weight.
+Plotting remains in notebooks.
+
+The CLI uses the same session and accepts repeated flags for a sweep:
+
+```bash
+cartpole-analyze windows --fit artifacts/fit \
+  --dataset datasets/generated/action_flip --ids-file splits/test.txt \
+  --reference nominal datasets/generated/nominal \
+  --reference-ids nominal splits/reference.txt \
+  --window-length 10 --window-length 25 --window-length 50 \
+  --reference-stride 5 --reference-windows-per-trajectory 20 \
+  --aggregation mean --output analysis/windows
+```
+
+Each `window_LENGTH` directory contains `scores.parquet`, `summary.parquet`,
+`reference_windows.parquet`, `skipped.parquet`, and `metadata.json` with the fit
+identity, selections, settings, and software versions. Input datasets must remain
+unchanged for reproducibility. Query embeddings and pairwise work are batched;
+the sparse point caches, selected reference bank, and returned tables remain in
+memory. Use strides/reference caps to control their size. The older `rolling`
+command continues to support previously saved window embedding artifacts.
 
 #### Metrics
 
@@ -560,13 +679,17 @@ cartpole-analyze population artifacts/embeddings/nominal \
   --output analysis/population
 ```
 
-All commands use Click. Analytics outputs include typed `config.json`, input hashes
+All commands use Click. Analyses of saved embeddings include typed `config.json`, input hashes
 and role ordering in `metadata.json`, unit tables, and command-specific results.
 Pairwise matrices have `pairwise_axes.json`; embeddings and bases are referenced,
 not copied or regenerated. The default `--max-pairs 4000000` limits each dense
 pairwise result (32 MB per array, with additional intermediates possible). MMD
 applies this to the pooled matrix. Change selections/stride during embedding or
-explicitly raise the analysis limit. Embedding storage remains sparse.
+explicitly raise the analysis limit. For `neighbors` and `rolling`, `--max-pairs`
+now limits a working block rather than rejecting a large total population:
+pyidk reduces references without allocating the full pairwise matrix. The new
+`windows` command controls blocks with `--query-batch-size` and
+`--reference-block-size`. Embedding storage remains sparse.
 
 Optional plotting helpers remain in `cartpole_idk.visualization.analytics` and
 require matplotlib. Plots do not replace quantitative cluster diagnostics.

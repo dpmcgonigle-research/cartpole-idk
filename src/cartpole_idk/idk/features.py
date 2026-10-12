@@ -36,6 +36,8 @@ def build_sequence_batch(
 
         if config.representation in {"state", "transition", "window"}:
             sequences.append(obs)
+        elif config.representation == "transition_action":
+            sequences.append(np.concatenate([obs[:-1], obs[1:], actions[:, None]], axis=1))
         elif config.representation == "state_action":
             one_hot = np.eye(2, dtype=float)[actions]
             sequences.append(np.concatenate([obs[:-1], one_hot], axis=1))

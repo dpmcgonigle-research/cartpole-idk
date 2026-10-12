@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+from pyidk import reduce_references
 
 from cartpole_idk.idk.features import build_sequence_batch
 from cartpole_idk.idk.fitting import IDKReference
@@ -22,9 +23,11 @@ def trajectory_familiarity(
     batch = build_sequence_batch(trajectories, reference.config)
     scaled = batch.with_values(reference.scaler.transform(batch.values))
     embeddings = reference.model.transform(scaled)
-    similarities = reference.model.similarity(
-        embeddings, reference.reference_embeddings, dense=True
-    )
-    k_eff = min(k, similarities.shape[1])
-    top = np.partition(similarities, -k_eff, axis=1)[:, -k_eff:]
-    return top.mean(axis=1)
+    return reduce_references(
+        embeddings,
+        reference.reference_embeddings,
+        n_partitions=reference.config.t,
+        metric="similarity",
+        aggregation="top_k",
+        k=k,
+    ).scores

@@ -2,14 +2,55 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import pandas as pd
+from pyidk import reduce_references
 
-from cartpole_idk.analytics.metrics import DEFAULT_MAX_PAIRS, METRICS, pairwise
+from cartpole_idk.analytics.metrics import DEFAULT_MAX_PAIRS, METRICS, PYIDK_METRICS
 from cartpole_idk.storage.embeddings import EmbeddingSet
+from cartpole_idk.storage.units import AnalysisUnit
+
+
+def eligible_references(
+    query: Sequence[AnalysisUnit],
+    reference: Sequence[AnalysisUnit],
+    *,
+    exclude_same_unit: bool = True,
+    exclude_same_trajectory: bool = False,
+    max_overlap: float | None = None,
+) -> np.ndarray:
+    """Build one eligibility block using original source identities and intervals."""
+    allowed = np.ones((len(query), len(reference)), dtype=bool)
+    if not exclude_same_unit and not exclude_same_trajectory and max_overlap is None:
+        return allowed
+    same_source = np.ones_like(allowed)
+    for part in (0, 1):
+        left = np.asarray([unit.source_key[part] for unit in query], dtype=object)
+        right = np.asarray([unit.source_key[part] for unit in reference], dtype=object)
+        same_source &= left[:, None] == right[None, :]
+    a = np.asarray([u.metadata.get("source_start_step", u.start_step) for u in query])[:, None]
+    b = np.asarray([u.metadata.get("source_end_step", u.end_step) for u in query])[:, None]
+    c = np.asarray([u.metadata.get("source_start_step", u.start_step) for u in reference])[None, :]
+    d = np.asarray([u.metadata.get("source_end_step", u.end_step) for u in reference])[None, :]
+    if exclude_same_unit:
+        left_ids = np.asarray([u.unit_id for u in query], dtype=object)
+        right_ids = np.asarray([u.unit_id for u in reference], dtype=object)
+        allowed &= ~(left_ids[:, None] == right_ids[None, :])
+        allowed &= ~(same_source & (a == c) & (b == d))
+    if exclude_same_trajectory:
+        allowed &= ~same_source
+    if max_overlap is not None:
+        left_lengths = np.asarray([u.raw_length for u in query])[:, None]
+        right_lengths = np.asarray([u.raw_length for u in reference])[None, :]
+        overlap = np.maximum(0, np.minimum(b, d) - np.maximum(a, c))
+        allowed &= ~(
+            same_source & (overlap > max_overlap * np.minimum(left_lengths, right_lengths))
+        )
+    return allowed
 
 
 @dataclass(slots=True)
@@ -46,62 +87,62 @@ def top_k_neighbors(
         exclude_same_unit: Exclude identical units or matching source intervals.
         exclude_same_trajectory: Exclude every unit from the same original source trajectory.
         max_overlap: Maximum intersection/shorter-length ratio for same-source intervals.
-        max_pairs: Maximum entries in the dense query-by-reference matrix.
+        max_pairs: Maximum entries in a working pairwise block (not the total population).
         metric_parameters: Extra metric arguments, such as epsilon for KL.
     """
     if k < 1 or (max_overlap is not None and not 0 <= max_overlap <= 1):
         raise ValueError("Require k >= 1 and max_overlap in [0, 1]")
-    values = pairwise(
-        query, reference, metric=metric, max_pairs=max_pairs, **(metric_parameters or {})
+    query.compatible_with(reference)
+    if metric not in METRICS:
+        raise ValueError(f"Unknown metric: {metric}")
+    if max_pairs < 1:
+        raise ValueError("max_pairs must be positive")
+    parameters = dict(metric_parameters or {})
+    if metric in {"js", "kl"}:
+        parameters.setdefault("atol", 1e-10)
+
+    def eligibility(q_indices: np.ndarray, r_indices: np.ndarray) -> np.ndarray:
+        return eligible_references(
+            [query.units[i] for i in q_indices],
+            [reference.units[i] for i in r_indices],
+            exclude_same_unit=exclude_same_unit,
+            exclude_same_trajectory=exclude_same_trajectory,
+            max_overlap=max_overlap,
+        )
+
+    query_block = min(128, max_pairs)
+    result = reduce_references(
+        query.values,
+        reference.values,
+        n_partitions=query.t,
+        metric=PYIDK_METRICS[metric],
+        metric_parameters=parameters,
+        aggregation="top_k",
+        k=k,
+        eligibility=eligibility,
+        query_block_size=query_block,
+        reference_block_size=min(1024, max_pairs // query_block),
+        return_selected=True,
     )
-    higher = METRICS[metric].direction == "higher"
+    assert result.selected_indices is not None and result.selected_values is not None
     links, scores = [], []
     for i, unit in enumerate(query.units):
-        eligible = np.ones(len(reference.units), dtype=bool)
-        for j, other in enumerate(reference.units):
-            same_source = unit.source_key == other.source_key
-            if exclude_same_unit and (
-                unit.unit_id == other.unit_id
-                or (
-                    same_source
-                    and unit.metadata.get("source_start_step", unit.start_step)
-                    == other.metadata.get("source_start_step", other.start_step)
-                    and unit.metadata.get("source_end_step", unit.end_step)
-                    == other.metadata.get("source_end_step", other.end_step)
-                )
-            ):
-                eligible[j] = False
-            if same_source and exclude_same_trajectory:
-                eligible[j] = False
-            if same_source and max_overlap is not None:
-                start = max(
-                    unit.metadata.get("source_start_step", unit.start_step),
-                    other.metadata.get("source_start_step", other.start_step),
-                )
-                end = min(
-                    unit.metadata.get("source_end_step", unit.end_step),
-                    other.metadata.get("source_end_step", other.end_step),
-                )
-                if max(0, end - start) / min(unit.raw_length, other.raw_length) > max_overlap:
-                    eligible[j] = False
-        indices = np.flatnonzero(eligible)
-        order = np.argsort(-values[i, indices] if higher else values[i, indices], kind="stable")
-        selected = indices[order[:k]]
+        selected = result.selected_indices[i]
         scores.append(
             {
                 **unit.record(),
                 "metric": metric,
                 "neighbor_count": len(selected),
-                "score": float(values[i, selected].mean()) if len(selected) else None,
+                "score": float(result.scores[i]) if len(selected) else None,
             }
         )
-        for rank, j in enumerate(selected, 1):
+        for rank, (j, value) in enumerate(zip(selected, result.selected_values[i], strict=True), 1):
             links.append(
                 {
                     "query_unit_id": unit.unit_id,
                     "rank": rank,
                     "metric": metric,
-                    "metric_value": float(values[i, j]),
+                    "metric_value": float(value),
                     **{
                         f"reference_{key}": value
                         for key, value in reference.units[j].record().items()

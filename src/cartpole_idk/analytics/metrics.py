@@ -7,14 +7,20 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 import numpy as np
+import pyidk
 from pyidk import pairwise_similarity
 from scipy.sparse import csr_matrix
-from scipy.spatial.distance import jensenshannon
-from scipy.special import rel_entr
 
 from cartpole_idk.storage.embeddings import EmbeddingSet
 
 DEFAULT_MAX_PAIRS = 4_000_000
+PYIDK_METRICS: dict[str, Literal["similarity", "distance", "cosine", "js", "kl"]] = {
+    "idk": "similarity",
+    "idk-distance": "distance",
+    "cosine": "cosine",
+    "js": "js",
+    "kl": "kl",
+}
 
 
 def check_pairwise_size(n: int, m: int, max_pairs: int = DEFAULT_MAX_PAIRS) -> None:
@@ -81,13 +87,7 @@ def pairwise_idk_distance(
     """
     self_pair = y is None or y is x
     x, y = _inputs(x, y, t, max_pairs)
-    xx = np.asarray(x.multiply(x).sum(axis=1)).ravel() / t
-    yy = np.asarray(y.multiply(y).sum(axis=1)).ravel() / t
-    squared = xx[:, None] + yy[None, :] - 2 * pairwise_similarity(x, y, n_partitions=t)
-    result = np.sqrt(np.maximum(squared, 0))
-    if self_pair:
-        np.fill_diagonal(result, 0)
-    return result
+    return pyidk.pairwise_distance(x, None if self_pair else y, n_partitions=t)
 
 
 def pairwise_cosine(
@@ -102,66 +102,7 @@ def pairwise_cosine(
         max_pairs: Maximum entries in the dense query-by-reference result.
     """
     x, y = _inputs(x, y, t, max_pairs)
-    norms = (
-        np.sqrt(np.asarray(x.multiply(x).sum(axis=1)))
-        * np.sqrt(np.asarray(y.multiply(y).sum(axis=1))).T
-    )
-    dots = (x @ y.T).toarray()
-    return np.clip(np.divide(dots, norms, out=np.zeros_like(dots), where=norms > 0), -1, 1)
-
-
-def _occupancy(x: csr_matrix, partition: int, psi: int) -> np.ndarray:
-    # Densify one partition at a time, not all t * psi features.
-    """Recover one partition's probabilities, including its outside-region mass.
-
-    Args:
-        x: Sparse mean-occupancy embedding rows.
-        partition: Zero-based isolation partition index.
-        psi: Number of regions per partition.
-    """
-    block = x[:, partition * psi : (partition + 1) * psi].toarray()
-    mass = block.sum(axis=1)
-    if np.any(block < -1e-10) or np.any(mass > 1 + 1e-10):
-        raise ValueError("Divergences require nonnegative mean occupancy with partition mass <= 1")
-    block = np.maximum(block, 0)
-    augmented = np.column_stack((block, np.maximum(0, 1 - block.sum(axis=1))))
-    # Only correct floating-point drift, never renormalize away outside mass.
-    return augmented / augmented.sum(axis=1, keepdims=True)
-
-
-def _divergence(
-    x: csr_matrix, y: csr_matrix | None, *, t: int, epsilon: float | None, max_pairs: int
-) -> np.ndarray:
-    """Compute partition-averaged JS or smoothed KL divergence in bounded blocks.
-
-    Args:
-        x: Query embedding rows, with t * psi columns.
-        y: Reference embedding rows; None compares x with itself.
-        t: Number of isolation partitions.
-        max_pairs: Maximum entries in the dense query-by-reference result.
-        epsilon: KL smoothing mass per cell; None selects unsmoothed JS.
-    """
-    x, y = _inputs(x, y, t, max_pairs)
-    psi = x.shape[1] // t
-    if psi < 1:
-        raise ValueError("Occupancy requires at least one cell per partition")
-    result = np.zeros((x.shape[0], y.shape[0]))
-    for partition in range(t):
-        p, q = _occupancy(x, partition, psi), _occupancy(y, partition, psi)
-        if epsilon is not None:
-            p = (p + epsilon) / (1 + epsilon * (psi + 1))
-            q = (q + epsilon) / (1 + epsilon * (psi + 1))
-        # Bound broadcasting memory to approximately 64 * 64 * (psi+1) values.
-        for i in range(0, x.shape[0], 64):
-            for j in range(0, y.shape[0], 64):
-                a, b = p[i : i + 64, None, :], q[None, j : j + 64, :]
-                if epsilon is None:
-                    # SciPy returns sqrt(JS); this API returns JS divergence in nats.
-                    values = jensenshannon(a, b, axis=-1) ** 2
-                else:
-                    values = rel_entr(a, b).sum(axis=-1)
-                result[i : i + 64, j : j + 64] += values / t
-    return np.maximum(result, 0)
+    return pyidk.pairwise_cosine(x, y, n_partitions=t)
 
 
 def pairwise_js_divergence(
@@ -175,7 +116,8 @@ def pairwise_js_divergence(
         t: Number of isolation partitions.
         max_pairs: Maximum entries in the dense query-by-reference result.
     """
-    return _divergence(x, y, t=t, epsilon=None, max_pairs=max_pairs)
+    x, y = _inputs(x, y, t, max_pairs)
+    return pyidk.pairwise_js_divergence(x, y, n_partitions=t, atol=1e-10)
 
 
 def pairwise_kl_divergence(
@@ -199,7 +141,8 @@ def pairwise_kl_divergence(
     """
     if not np.isfinite(epsilon) or epsilon <= 0:
         raise ValueError("KL requires finite epsilon > 0")
-    return _divergence(x, y, t=t, epsilon=epsilon, max_pairs=max_pairs)
+    x, y = _inputs(x, y, t, max_pairs)
+    return pyidk.pairwise_kl_divergence(x, y, n_partitions=t, epsilon=epsilon, atol=1e-10)
 
 
 @dataclass(frozen=True, slots=True)

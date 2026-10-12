@@ -167,7 +167,12 @@ class IDKConfig(PipelineModel):
     """
 
     representation: Literal[
-        "state", "transition", "state_action", "state_action_next_state", "window"
+        "state",
+        "transition",
+        "transition_action",
+        "state_action",
+        "state_action_next_state",
+        "window",
     ] = "state"
     observation_source: Literal["true", "agent"] = "true"
     action_source: Literal["commanded", "executed"] = "executed"
@@ -185,6 +190,8 @@ class IDKConfig(PipelineModel):
         """
         if self.representation == "transition":
             return 2 * observation_width
+        if self.representation == "transition_action":
+            return 2 * observation_width + 1
         if self.representation == "state_action":
             return observation_width + 2
         if self.representation == "state_action_next_state":
@@ -200,6 +207,40 @@ class WindowConfig(PipelineModel):
     mode: Literal["whole", "window"] = "whole"
     window_length: int = Field(default=25, ge=1)
     stride: int = Field(default=1, ge=1)
+
+
+class WindowScoringConfig(PipelineModel):
+    """Moving analysis windows in raw transitions; references have no time alignment."""
+
+    window_length: int = Field(default=25, ge=1, strict=True)
+    query_stride: int = Field(default=1, ge=1, strict=True)
+    reference_stride: int = Field(default=1, ge=1, strict=True)
+    reference_windows_per_trajectory: int | None = Field(default=None, ge=1, strict=True)
+    random_state: int = Field(default=42, ge=0, strict=True)
+    metrics: tuple[Literal["idk", "idk-distance", "outside-mass", "cosine", "js", "kl"], ...] = (
+        "idk",
+        "idk-distance",
+        "outside-mass",
+    )
+    aggregation: Literal["mean", "top_k"] = "mean"
+    k: int | None = Field(default=None, ge=1, strict=True)
+    epsilon: float | None = Field(default=None, gt=0)
+    exclude_same_unit: bool = True
+    exclude_same_trajectory: bool = False
+    max_overlap: float | None = Field(default=None, ge=0, le=1)
+    query_batch_size: int = Field(default=128, ge=1, strict=True)
+    reference_block_size: int = Field(default=1024, ge=1, strict=True)
+
+    @model_validator(mode="after")
+    def scoring_options(self) -> Self:
+        """Reject ambiguous reductions and missing KL smoothing, including empty runs."""
+        if not self.metrics or len(set(self.metrics)) != len(self.metrics):
+            raise ValueError("Select at least one metric, without duplicates")
+        if (self.aggregation == "top_k") != (self.k is not None):
+            raise ValueError("k is required exactly when aggregation is top_k")
+        if ("kl" in self.metrics) != (self.epsilon is not None):
+            raise ValueError("epsilon is required exactly when KL is requested")
+        return self
 
 
 class DatasetSelection(PipelineModel):
