@@ -14,6 +14,7 @@ class Trajectory:
 
     True and agent observations have T+1 rows; actions, rewards, and ending flags
     have T rows. Commanded actions may differ from actions executed after perturbation.
+    Both action arrays have shape (T,) and store scalar CartPole actions 0/1.
     """
 
     trajectory_id: str

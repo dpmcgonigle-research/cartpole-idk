@@ -81,6 +81,31 @@ cartpole-train   --run-dir runs/dqn_seed42   --total-steps 200000   --eval-every
 Training is measured in environment steps. Periodic evaluation runs are greedy
 (`epsilon=0`) and do not update the model.
 
+Each periodic evaluation writes mean/std return, median return, mean episode
+length, `full_length_rate` (the fraction reaching `--max-episode-steps`), and
+`p10_return`, `p25_return`, `p50_return`, `p75_return`, and `p90_return` to
+`evaluation_metrics.csv`. Percentiles
+use linear interpolation across evaluation episode returns; `p50_return` equals
+`median_return`. The progress log includes the completion fraction and all five
+percentiles. Checkpoint evaluations record the same metrics in checkpoint
+metadata and logging.
+
+Add `--debug-init-conds` to write `RUN_DIR/failure_init_conds.log`:
+
+```bash
+cartpole-train --run-dir runs/dqn_debug --debug-init-conds \
+  --eval-every 5000 --eval-episodes 100 --max-episode-steps 500
+```
+
+The file appends a section for each periodic and checkpoint evaluation, labeled
+with the training step, evaluation kind, timestamp, seed, episode count, and
+maximum steps. Each episode with return **less than the configured maximum**
+records its return, episode number, seed, and exact initial environment state
+(`x`, `x_dot`, `theta`, `theta_dot`) before the first action. States retain the
+sampled precision; angles are radians. Evaluations with no failures get an
+explicit "No failures" entry. The flag is saved in training configuration and
+checkpoint metadata; when omitted, no failure log is created.
+
 Training accepts the same [initial-state options](#initial-state-sampling) as
 generation. They apply to every training and evaluation episode, and are saved
 under `initial_state` in `config.json` and the checkpoint's training configuration:
@@ -308,11 +333,20 @@ The application adapter supports:
 - `state`: 4D observations
 - `transition`: 8D `[state, next_state]`
 - `transition_action`: 9D `[state, next_state, action]`, with scalar action 0/1
-- `state_action`: 6D `[state, one_hot_action]`
-- `state_action_next_state`: 10D `[state, one_hot_action, next_state]`
+- `state_action`: 5D `[state, action]`, with scalar action 0/1
+- `state_action_next_state` (alias `state_action_state`): 9D `[state, action, next_state]`, with scalar action 0/1
 - `window`: flattened temporal observation features
 
 Normalization uses `pyidk.Standardizer`, fitted only on reference/training experience.
+The action column is standardized along with the state columns. `--action-source`
+selects commanded or executed actions; both use the same scalar encoding.
+
+Raw and prepared trajectory stores already contain scalar actions and can be reused.
+Existing 6D/10D one-hot action fits and embeddings must be regenerated with
+`cartpole-fit` and `cartpole-embed`, followed by recomputing window analytics and
+notebook results. Saved configurations now record `action_encoding: "scalar"`;
+legacy one-hot artifacts are rejected rather than interpreted as scalar artifacts.
+The IDK embedding width remains `t * psi`.
 
 [Back to Top](#cartpole-idk)
 

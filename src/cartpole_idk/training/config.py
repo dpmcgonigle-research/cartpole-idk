@@ -30,6 +30,7 @@ class TrainingConfig:
     checkpoint_every: int = 10_000
     seed: int = 42
     initial_state: InitialStateConfig = field(default_factory=InitialStateConfig)
+    debug_init_conds: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Return settings with JSON-compatible initial-state parameters."""

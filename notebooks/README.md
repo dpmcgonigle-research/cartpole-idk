@@ -10,3 +10,7 @@ See [cartpole-idk-experiments.docx](../docs/cartpole-idk-experiments.docx) for i
 4. Failure measurement experiments -- try to discern varying levels of failure.
 5. Mixed cause failure experiments -- broaden the failure cases.
 6. Generalization experiments -- extend evaluation to unseen conditions.
+
+## IDK familiarity notebooks
+
+- [Nominal vs action delay](2-idk-familiarity/nominal-vs-action-delay.ipynb): compares nominal and delayed populations across 30 state/transition bases and four window sizes. Includes population metrics, score curves, detection rates, false alarms, latency, and parameter sensitivity. Uses nominal episodes to calibrate alarms. Requires original source datasets and fit artifacts. Saves tables and figures under `artifacts/analysis/idk-familiarity-action-delay`.

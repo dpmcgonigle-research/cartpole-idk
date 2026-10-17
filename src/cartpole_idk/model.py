@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Literal, Self
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 
 class PipelineModel(BaseModel):
@@ -176,11 +176,18 @@ class IDKConfig(PipelineModel):
     ] = "state"
     observation_source: Literal["true", "agent"] = "true"
     action_source: Literal["commanded", "executed"] = "executed"
+    action_encoding: Literal["scalar"] = "scalar"
     window_length: int = Field(default=25, ge=1)
     psi: int = Field(default=32, ge=2)
     t: int = Field(default=200, ge=1)
     random_state: int | None = Field(default=42, ge=0)
     scaler: Literal["standard"] = "standard"
+
+    @field_validator("representation", mode="before")
+    @classmethod
+    def canonical_representation(cls, value: object) -> object:
+        """Accept the notebook's state_action_state name as an alias."""
+        return "state_action_next_state" if value == "state_action_state" else value
 
     def feature_width(self, observation_width: int) -> int:
         """Return the number of columns in one unscaled feature vector.
@@ -193,9 +200,9 @@ class IDKConfig(PipelineModel):
         if self.representation == "transition_action":
             return 2 * observation_width + 1
         if self.representation == "state_action":
-            return observation_width + 2
+            return observation_width + 1
         if self.representation == "state_action_next_state":
-            return 2 * observation_width + 2
+            return 2 * observation_width + 1
         if self.representation == "window":
             return self.window_length * observation_width
         return observation_width

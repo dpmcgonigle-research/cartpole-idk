@@ -33,8 +33,8 @@ def test_windows_provenance_and_boundaries(trajectory):
     [
         ("state", 4, 4),
         ("transition", 3, 8),
-        ("state_action", 3, 6),
-        ("state_action_next_state", 3, 10),
+        ("state_action", 3, 5),
+        ("state_action_next_state", 3, 9),
         ("window", 3, 8),
     ],
 )

@@ -14,6 +14,7 @@ from cartpole_idk.artifacts.common import (
     content_id,
     load_metadata,
     load_units,
+    require_scalar_action_artifact,
     save_units,
     unit_records,
 )
@@ -94,6 +95,7 @@ class EmbeddingArtifact:
         root = Path(path)
         metadata = load_metadata(root, "embedding", FILES)
         config = EmbedConfig.model_validate_json((root / "config.json").read_text(encoding="utf-8"))
+        require_scalar_action_artifact(config.fit.idk)
         units = load_units(
             root / "units.parquet", config.unit, config.trajectory_ids, metadata.n_units
         )

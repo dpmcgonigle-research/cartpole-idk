@@ -26,6 +26,11 @@ logger = logging.getLogger(__name__)
 @click.option("--batch-size", default=128, type=int)
 @click.option("--eval-every", default=5000, type=int)
 @click.option("--eval-episodes", default=20, type=int)
+@click.option(
+    "--debug-init-conds",
+    is_flag=True,
+    help="Log failed evaluation returns and initial states to RUN_DIR/failure_init_conds.log",
+)
 @click.option("--checkpoint-every", default=10000, type=int)
 @click.option("--seed", default=42, type=int)
 @click.option("--device", default="cpu", type=str)
@@ -141,6 +146,7 @@ def main(
     batch_size,
     eval_every,
     eval_episodes,
+    debug_init_conds: bool,
     checkpoint_every,
     seed,
     device,
@@ -174,6 +180,8 @@ def main(
         batch_size: Replay-buffer samples per training update.
         eval_every: Environment steps between policy evaluations.
         eval_episodes: Greedy episodes per evaluation.
+        debug_init_conds: Write each failed evaluation return and initial state to
+            failure_init_conds.log in the run directory.
         checkpoint_every: Environment steps between saved checkpoints.
         seed: Random seed for training.
         device: PyTorch device, such as cpu or cuda.
@@ -241,6 +249,7 @@ def main(
         batch_size=batch_size,
         eval_every=eval_every,
         eval_episodes=eval_episodes,
+        debug_init_conds=debug_init_conds,
         checkpoint_every=checkpoint_every,
         seed=seed,
         initial_state=initial_state,

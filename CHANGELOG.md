@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1] - 2026-10-12
+
+### Added
+
+- DQN evaluation return percentiles (`p10_return`, `p25_return`, `p50_return`) in periodic metrics and checkpoint metadata. Evaluation logging now includes these percentiles and the fraction reaching the configured maximum episode length.
+- `cartpole-train --debug-init-conds` to append periodic and checkpoint evaluation sections to `failure_init_conds.log`, recording each failed episode's return, seed, and exact initial state, including explicit sections when no failures occur.
+- Updated action representation `state_action` and `state_action_state` to be a single dimension.
+
 ## [0.2.0] - 2026-10-08
 
 ### Added

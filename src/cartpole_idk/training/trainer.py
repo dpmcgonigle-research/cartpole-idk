@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import logging
+from datetime import datetime
 from pathlib import Path
 
 import gymnasium as gym
@@ -12,7 +13,7 @@ from cartpole_idk.initial_state import reset_cartpole
 from cartpole_idk.training.checkpoint import save_checkpoint
 from cartpole_idk.training.config import TrainingConfig
 from cartpole_idk.training.dqn import DQNAgent, ReplayBuffer, Transition
-from cartpole_idk.training.evaluation import evaluate_agent
+from cartpole_idk.training.evaluation import EvaluationFailure, evaluate_agent
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,53 @@ def _append_csv(path: Path, row: dict) -> None:
         if not exists:
             writer.writeheader()
         writer.writerow(row)
+
+
+def _log_evaluation(
+    run_dir: Path,
+    cfg: TrainingConfig,
+    *,
+    step: int,
+    kind: str,
+    seed: int,
+    metrics: dict[str, float],
+    failures: list[EvaluationFailure] | None,
+) -> None:
+    """Log aggregate metrics and optionally append a section of failed initial states."""
+    logger.info(
+        "Step %d/%d: %s evaluation: mean return=%.2f, std=%.2f, "
+        "fraction reaching %d steps=%.4f, p10=%.2f, p25=%.2f, p50=%.2f, p75=%.2f, p90=%.2f",
+        step,
+        cfg.total_steps,
+        kind,
+        metrics["mean_return"],
+        metrics["std_return"],
+        cfg.max_episode_steps,
+        metrics["full_length_rate"],
+        metrics["p10_return"],
+        metrics["p25_return"],
+        metrics["p50_return"],
+        metrics["p75_return"],
+        metrics["p90_return"],
+    )
+    if failures is None:
+        return
+    timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+    lines = [
+        f"\n=== {kind} evaluation: step={step}, time={timestamp} ===",
+        f"episodes={cfg.eval_episodes} seed={seed} max_episode_steps={cfg.max_episode_steps} "
+        f"failures={len(failures)}",
+    ]
+    for failure in failures:
+        lines.append(
+            f"episode={failure.episode} seed={failure.seed} return={failure.episode_return:.17g} "
+            f"x={failure.x:.17g} x_dot={failure.x_dot:.17g} "
+            f"theta={failure.theta:.17g} theta_dot={failure.theta_dot:.17g}"
+        )
+    if not failures:
+        lines.append("No failures (all returns reached max_episode_steps).")
+    with (run_dir / "failure_init_conds.log").open("a", encoding="utf-8") as stream:
+        stream.write("\n".join(lines) + "\n")
 
 
 def train(run_dir: str | Path, cfg: TrainingConfig, *, device: str = "cpu") -> Path:
@@ -120,28 +168,47 @@ def train(run_dir: str | Path, cfg: TrainingConfig, *, device: str = "cpu") -> P
             logger.info(
                 "Step %d/%d: evaluating over %d episodes", step, cfg.total_steps, cfg.eval_episodes
             )
+            failures: list[EvaluationFailure] | None = [] if cfg.debug_init_conds else None
+            evaluation_seed = cfg.seed + 100_000 + step
             metrics = evaluate_agent(
                 agent,
                 episodes=cfg.eval_episodes,
                 max_episode_steps=cfg.max_episode_steps,
-                seed=cfg.seed + 100_000 + step,
+                seed=evaluation_seed,
                 initial_state=cfg.initial_state,
+                failures=failures,
             )
             _append_csv(run_dir / "evaluation_metrics.csv", {"step": step, **metrics})
-            logger.info(
-                "Evaluation: mean return=%.2f, std=%.2f",
-                metrics["mean_return"],
-                metrics["std_return"],
+            _log_evaluation(
+                run_dir,
+                cfg,
+                step=step,
+                kind="periodic",
+                seed=evaluation_seed,
+                metrics=metrics,
+                failures=failures,
             )
 
         if step % cfg.checkpoint_every == 0 or step == cfg.total_steps:
             logger.info("Step %d/%d: evaluating checkpoint", step, cfg.total_steps)
+            failures = [] if cfg.debug_init_conds else None
+            evaluation_seed = cfg.seed + 200_000 + step
             metrics = evaluate_agent(
                 agent,
                 episodes=cfg.eval_episodes,
                 max_episode_steps=cfg.max_episode_steps,
-                seed=cfg.seed + 200_000 + step,
+                seed=evaluation_seed,
                 initial_state=cfg.initial_state,
+                failures=failures,
+            )
+            _log_evaluation(
+                run_dir,
+                cfg,
+                step=step,
+                kind="checkpoint",
+                seed=evaluation_seed,
+                metrics=metrics,
+                failures=failures,
             )
             save_checkpoint(
                 agent,

@@ -31,10 +31,12 @@ from cartpole_idk.model import FitConfig, IDKConfig, WindowConfig
             "transition_action",
             "state_action",
             "state_action_next_state",
+            "state_action_state",
             "window",
         ]
     ),
     default="state",
+    help="Action features use scalar 0/1; state_action_state aliases state_action_next_state.",
 )
 @click.option("--observation-source", type=click.Choice(["true", "agent"]), default="true")
 @click.option("--action-source", type=click.Choice(["commanded", "executed"]), default="executed")

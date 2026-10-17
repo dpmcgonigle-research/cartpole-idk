@@ -16,12 +16,12 @@ def test_transition_representation(trajectory):
 
 def test_state_action_representation(trajectory):
     batch = build_sequence_batch([trajectory], IDKExperimentConfig(representation="state_action"))
-    assert batch.values.shape == (3, 6)
-    np.testing.assert_array_equal(batch.values[0, -2:], [1.0, 0.0])
+    assert batch.values.shape == (3, 5)
+    np.testing.assert_array_equal(batch.values[:, -1], trajectory.executed_actions)
 
 
 def test_state_action_next_state_representation(trajectory):
     batch = build_sequence_batch(
         [trajectory], IDKExperimentConfig(representation="state_action_next_state")
     )
-    assert batch.values.shape == (3, 10)
+    assert batch.values.shape == (3, 9)

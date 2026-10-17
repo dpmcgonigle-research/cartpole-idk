@@ -15,6 +15,7 @@ from cartpole_idk.artifacts.common import (
     content_id,
     load_metadata,
     load_units,
+    require_scalar_action_artifact,
     save_units,
     unit_records,
 )
@@ -134,6 +135,7 @@ class FitArtifact:
         root = Path(path)
         metadata = load_metadata(root, "fit", FILES)
         config = FitConfig.model_validate_json((root / "config.json").read_text(encoding="utf-8"))
+        require_scalar_action_artifact(config.idk)
         try:
             with np.load(root / "scaler.npz", allow_pickle=False) as data:
                 scaler = Standardizer(mean_=data["mean"], scale_=data["scale"])

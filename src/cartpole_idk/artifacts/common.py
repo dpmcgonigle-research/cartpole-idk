@@ -12,8 +12,22 @@ from tempfile import TemporaryDirectory
 import numpy as np
 import pandas as pd
 
-from cartpole_idk.model import ArtifactMetadata, UnitRecord, WindowConfig
+from cartpole_idk.model import ArtifactMetadata, IDKConfig, UnitRecord, WindowConfig
 from cartpole_idk.storage.units import AnalysisUnit
+
+
+def require_scalar_action_artifact(config: IDKConfig) -> None:
+    """Reject legacy one-hot artifacts whose saved configs lack an encoding marker."""
+    if (
+        config.representation in {"state_action", "state_action_next_state"}
+        and "action_encoding" not in config.model_fields_set
+    ):
+        raise ValueError(
+            "Legacy one-hot action artifact: state_action and state_action_next_state "
+            "now use scalar actions (5D and 9D for CartPole). Refit the basis and "
+            "regenerate embeddings and window analytics from the existing trajectories. "
+            "Do not relabel the old artifact's configuration."
+        )
 
 
 @contextmanager

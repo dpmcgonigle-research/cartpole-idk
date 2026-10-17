@@ -23,6 +23,9 @@ def build_sequence_batch(
 ) -> SequenceBatch:
     """Convert trajectories to feature sequences without scaling or fitting IDK.
 
+    Action representations insert one scalar 0/1 column per transition, using
+    the configured commanded or executed action stream.
+
     Args:
         trajectories: Raw episodes or segments, in the desired sequence order.
         config: Representation, observation/action sources, and temporal feature length.
@@ -39,11 +42,9 @@ def build_sequence_batch(
         elif config.representation == "transition_action":
             sequences.append(np.concatenate([obs[:-1], obs[1:], actions[:, None]], axis=1))
         elif config.representation == "state_action":
-            one_hot = np.eye(2, dtype=float)[actions]
-            sequences.append(np.concatenate([obs[:-1], one_hot], axis=1))
+            sequences.append(np.concatenate([obs[:-1], actions[:, None]], axis=1))
         elif config.representation == "state_action_next_state":
-            one_hot = np.eye(2, dtype=float)[actions]
-            sequences.append(np.concatenate([obs[:-1], one_hot, obs[1:]], axis=1))
+            sequences.append(np.concatenate([obs[:-1], actions[:, None], obs[1:]], axis=1))
         else:
             raise ValueError(f"Unknown representation: {config.representation}")
 
